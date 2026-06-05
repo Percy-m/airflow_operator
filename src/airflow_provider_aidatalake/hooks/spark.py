@@ -6,7 +6,7 @@ from typing import Any
 
 from airflow.sdk import BaseHook
 
-from airflow_provider_aidatalake.clients.http import HttpClient
+from airflow_provider_aidatalake.clients.http_client import HttpClient
 from airflow_provider_aidatalake.clients.spark_api import SparkApiClient
 from airflow_provider_aidatalake.clients.token import TokenProvider
 from airflow_provider_aidatalake.exceptions import AiDatalakeAuthError

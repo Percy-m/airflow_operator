@@ -605,7 +605,7 @@ src/
       spark.py
     clients/
       __init__.py
-      http.py
+      http_client.py
       token.py
       spark_api.py
     models/
@@ -627,7 +627,7 @@ src/
 | Trigger | `triggers/spark.py` | Triggerer 异步轮询，终态事件，cleanup 取消 |
 | Client | `clients/spark_api.py` | Spark API URL 拼接、请求、响应解析 |
 | Token | `clients/token.py` | POST 获取 token，从 Header 提取 `x-subject-token` |
-| HTTP | `clients/http.py` | requests/aiohttp 封装、超时、重试、错误映射 |
+| HTTP | `clients/http_client.py` | requests/aiohttp 封装、超时、重试、错误映射 |
 | Model | `models/spark.py` | 状态枚举、作业类型、事件结构 |
 | Utils | `utils/obs_path.py` | OBS 路径转换 |
 | Utils | `utils/validation.py` | 参数校验 |

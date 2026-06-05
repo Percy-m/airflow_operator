@@ -6,7 +6,7 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
-from airflow_provider_aidatalake.clients.http import HttpClient
+from airflow_provider_aidatalake.clients.http_client import HttpClient
 from airflow_provider_aidatalake.exceptions import AiDatalakeAuthError
 
 log = logging.getLogger(__name__)

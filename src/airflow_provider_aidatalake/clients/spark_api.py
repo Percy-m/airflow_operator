@@ -6,7 +6,7 @@ import logging
 from typing import Any
 from uuid import uuid4
 
-from airflow_provider_aidatalake.clients.http import HttpClient
+from airflow_provider_aidatalake.clients.http_client import HttpClient
 from airflow_provider_aidatalake.clients.token import TokenProvider, mask_token
 from airflow_provider_aidatalake.exceptions import AiDatalakeApiError
 
