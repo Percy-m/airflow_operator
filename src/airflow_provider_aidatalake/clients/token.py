@@ -2,11 +2,23 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from typing import Any
 
 from airflow_provider_aidatalake.clients.http import HttpClient
 from airflow_provider_aidatalake.exceptions import AiDatalakeAuthError
+
+log = logging.getLogger(__name__)
+
+
+def mask_token(token: str | None) -> str:
+    """Return a log-safe token preview."""
+    if not token:
+        return "<empty>"
+    if len(token) < 5:
+        return "***"
+    return f"{token[:5]}***"
 
 
 class TokenProvider:
@@ -35,6 +47,7 @@ class TokenProvider:
 
     def refresh_token(self) -> str:
         headers = {"Content-Type": "application/json", **self.auth_headers}
+        log.info("Requesting AiDatalake auth token auth_url=%s", self.auth_url)
         response = self.http_client.request(
             "POST",
             self.auth_url,
@@ -53,5 +66,5 @@ class TokenProvider:
         if not token:
             raise AiDatalakeAuthError("token response header x-subject-token is missing")
         self._token = token
+        log.info("AiDatalake auth token acquired token=%s", mask_token(token))
         return token
-

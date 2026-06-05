@@ -67,12 +67,18 @@ class SparkJobTrigger(BaseTrigger):
         )
 
     async def run(self):
+        self.log.info(
+            "Spark trigger started job_id=%s poll_interval=%s",
+            self.job_id,
+            self.poll_interval,
+        )
         failure_count = 0
         while True:
             try:
                 event = await asyncio.to_thread(self._poll_once)
                 failure_count = 0
                 state = event.get("state")
+                self.log.info("Spark trigger poll succeeded job_id=%s state=%s", self.job_id, state)
                 if state in TERMINAL_STATES:
                     status = "success" if state == "SUCCEED" else "failed"
                     event["status"] = status
@@ -80,6 +86,12 @@ class SparkJobTrigger(BaseTrigger):
                     return
             except Exception as exc:
                 failure_count += 1
+                self.log.warning(
+                    "Spark trigger poll failed job_id=%s failure_count=%s: %s",
+                    self.job_id,
+                    failure_count,
+                    exc,
+                )
                 if failure_count >= self.max_poll_failures:
                     yield TriggerEvent(
                         {
@@ -96,6 +108,7 @@ class SparkJobTrigger(BaseTrigger):
             await asyncio.sleep(self.poll_interval)
 
     async def cleanup(self) -> None:
+        self.log.info("Spark trigger cleanup started job_id=%s", self.job_id)
         try:
             await asyncio.to_thread(self._cancel_for_cleanup)
         except Exception as exc:
@@ -125,6 +138,7 @@ class SparkJobTrigger(BaseTrigger):
         return event
 
     def _cancel_for_cleanup(self) -> None:
+        self.log.info("Spark trigger cleanup cancelling job_id=%s", self.job_id)
         hook = self._hook()
         hook.cancel_job(self.job_id, check_state=True)
 

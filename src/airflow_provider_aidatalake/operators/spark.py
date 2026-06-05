@@ -124,8 +124,30 @@ class SparkOperator(BaseOperator):
         self._job_id: str | None = None
 
     def execute(self, context: dict[str, Any]) -> str | None:
+        dag_id = None
+        dag = context.get("dag")
+        if dag is not None:
+            dag_id = getattr(dag, "dag_id", None)
+        dag_run = context.get("dag_run")
+        if dag_id is None and dag_run is not None:
+            dag_id = getattr(dag_run, "dag_id", None)
+        self.log.info(
+            "SparkOperator execution started task_id=%s dag_id=%s job_type=%s deferrable=%s config_mode=%s",
+            self.task_id,
+            dag_id,
+            self.job_type,
+            self.deferrable,
+            self._config_mode(),
+        )
         self._validate()
         payload = self._build_payload()
+        self.log.info(
+            "Spark job payload built name=%s endpoint_name=%s spark_version=%s has_restore_strategy=%s",
+            payload.get("name"),
+            payload.get("endpoint_name"),
+            payload.get("spark_version"),
+            "restore_strategy" in payload,
+        )
         hook = self._hook()
         client_token = str(uuid4())
 
@@ -143,6 +165,12 @@ class SparkOperator(BaseOperator):
         self.log.info("Spark job submitted successfully job_id=%s", job_id)
 
         if self.deferrable:
+            self.log.info(
+                "Deferring Spark job monitoring job_id=%s poll_interval=%s max_poll_failures=%s",
+                job_id,
+                self.poll_interval,
+                self.max_poll_failures,
+            )
             self.defer(
                 trigger=SparkJobTrigger(
                     spark_conn_id=self.spark_conn_id,
@@ -308,6 +336,11 @@ class SparkOperator(BaseOperator):
             verify=self.verify,
             workspace_id=self.workspace_id,
         )
+
+    def _config_mode(self) -> str:
+        if self.spark_base_url and self.auth_url:
+            return "direct"
+        return "connection"
 
     @staticmethod
     def _xcom_push(context: dict[str, Any], key: str, value: Any) -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Mapping
 from typing import Any
@@ -9,6 +10,8 @@ from typing import Any
 import requests
 
 from airflow_provider_aidatalake.exceptions import AiDatalakeApiError
+
+log = logging.getLogger(__name__)
 
 
 class HttpClient:
@@ -44,6 +47,15 @@ class HttpClient:
         last_error: Exception | None = None
 
         for attempt in range(attempts):
+            attempt_number = attempt + 1
+            log.info(
+                "HTTP request started method=%s url=%s attempt=%s timeout=%s",
+                method,
+                url,
+                attempt_number,
+                self.timeout,
+            )
+            start_time = time.perf_counter()
             try:
                 response = self.session.request(
                     method=method,
@@ -53,12 +65,29 @@ class HttpClient:
                     timeout=self.timeout,
                     verify=self.verify,
                 )
+                cost_ms = int((time.perf_counter() - start_time) * 1000)
+                log.info(
+                    "HTTP response received method=%s url=%s status_code=%s cost_ms=%s",
+                    method,
+                    url,
+                    response.status_code,
+                    cost_ms,
+                )
                 if response.status_code in expected:
                     return response
                 if not self._should_retry_status(response.status_code) or attempt == attempts - 1:
                     self._raise_api_error(response)
             except (requests.Timeout, requests.ConnectionError) as exc:
+                cost_ms = int((time.perf_counter() - start_time) * 1000)
                 last_error = exc
+                log.warning(
+                    "HTTP request failed method=%s url=%s attempt=%s cost_ms=%s error=%s",
+                    method,
+                    url,
+                    attempt_number,
+                    cost_ms,
+                    exc,
+                )
                 if attempt == attempts - 1:
                     raise AiDatalakeApiError(
                         f"HTTP {method} {url} failed: {exc}",
@@ -106,4 +135,3 @@ class HttpClient:
             request_id=request_id,
             retryable=HttpClient._should_retry_status(response.status_code),
         )
-
