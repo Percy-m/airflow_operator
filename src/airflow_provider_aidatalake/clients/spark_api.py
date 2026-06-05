@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from uuid import uuid4
 
 from airflow_provider_aidatalake.clients.http import HttpClient
-from airflow_provider_aidatalake.clients.token import TokenProvider
+from airflow_provider_aidatalake.clients.token import TokenProvider, mask_token
 from airflow_provider_aidatalake.exceptions import AiDatalakeApiError
+
+log = logging.getLogger(__name__)
 
 
 class SparkApiClient:
@@ -26,9 +29,16 @@ class SparkApiClient:
     ) -> str:
         headers = self._auth_headers()
         headers["X-Client-Token"] = client_token or str(uuid4())
+        path = f"/v2/workspaces/{workspace_id}/spark-jobs"
+        log.info(
+            "Creating Spark job request path=%s headers=%s request_body=%s",
+            path,
+            _mask_headers(headers),
+            payload,
+        )
         response = self._request_with_token_refresh(
             "POST",
-            f"/v2/workspaces/{workspace_id}/spark-jobs",
+            path,
             headers=headers,
             json=payload,
             expected_statuses={201},
@@ -85,3 +95,13 @@ class SparkApiClient:
             headers["X-Auth-Token"] = self.token_provider.refresh_token()
             kwargs["headers"] = headers
             return self.http_client.request(method, path, **kwargs)
+
+
+def _mask_headers(headers: dict[str, str]) -> dict[str, str]:
+    masked: dict[str, str] = {}
+    for key, value in headers.items():
+        if "token" in key.lower() or "authorization" in key.lower():
+            masked[key] = mask_token(value)
+        else:
+            masked[key] = value
+    return masked
