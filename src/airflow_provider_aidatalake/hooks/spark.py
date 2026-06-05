@@ -24,14 +24,26 @@ class SparkHook(BaseHook):
     def __init__(
         self,
         *,
-        spark_conn_id: str = default_conn_name,
+        spark_conn_id: str | None = None,
         auth_conn_id: str | None = None,
         workspace_id: str,
+        spark_base_url: str | None = None,
+        auth_url: str | None = None,
+        auth_body: dict[str, Any] | None = None,
+        auth_headers: dict[str, str] | None = None,
+        request_timeout: int = 30,
+        verify: bool = True,
     ) -> None:
         super().__init__()
-        self.spark_conn_id = spark_conn_id
-        self.auth_conn_id = auth_conn_id or spark_conn_id
+        self.spark_conn_id = spark_conn_id or self.default_conn_name
+        self.auth_conn_id = auth_conn_id or self.spark_conn_id
         self.workspace_id = workspace_id
+        self.spark_base_url = spark_base_url
+        self.auth_url = auth_url
+        self.auth_body = dict(auth_body or {})
+        self.auth_headers = dict(auth_headers or {})
+        self.request_timeout = request_timeout
+        self.verify = verify
         self._client: SparkApiClient | None = None
 
     def submit_job(self, payload: dict[str, Any], *, client_token: str | None = None) -> str:
@@ -70,6 +82,21 @@ class SparkHook(BaseHook):
         return self._client
 
     def _build_client(self) -> SparkApiClient:
+        if self.spark_base_url and self.auth_url:
+            spark_http_client = HttpClient(
+                base_url=self.spark_base_url,
+                timeout=self.request_timeout,
+                verify=self.verify,
+            )
+            auth_http_client = HttpClient(timeout=self.request_timeout, verify=self.verify)
+            token_provider = TokenProvider(
+                http_client=auth_http_client,
+                auth_url=self.auth_url,
+                auth_body=self.auth_body,
+                auth_headers=self.auth_headers,
+            )
+            return SparkApiClient(http_client=spark_http_client, token_provider=token_provider)
+
         spark_conn = self.get_connection(self.spark_conn_id)
         auth_conn = self.get_connection(self.auth_conn_id)
 

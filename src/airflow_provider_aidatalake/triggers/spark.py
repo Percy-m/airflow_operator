@@ -17,10 +17,16 @@ class SparkJobTrigger(BaseTrigger):
     def __init__(
         self,
         *,
-        spark_conn_id: str,
+        spark_conn_id: str | None,
         auth_conn_id: str | None,
         workspace_id: str,
         job_id: str,
+        spark_base_url: str | None = None,
+        auth_url: str | None = None,
+        auth_body: dict[str, Any] | None = None,
+        auth_headers: dict[str, str] | None = None,
+        request_timeout: int = 30,
+        verify: bool = True,
         poll_interval: int = 30,
         max_poll_failures: int = 10,
         fetch_detail_on_poll: bool = True,
@@ -28,6 +34,12 @@ class SparkJobTrigger(BaseTrigger):
         super().__init__()
         self.spark_conn_id = spark_conn_id
         self.auth_conn_id = auth_conn_id
+        self.spark_base_url = spark_base_url
+        self.auth_url = auth_url
+        self.auth_body = dict(auth_body or {})
+        self.auth_headers = dict(auth_headers or {})
+        self.request_timeout = request_timeout
+        self.verify = verify
         self.workspace_id = workspace_id
         self.job_id = job_id
         self.poll_interval = poll_interval
@@ -40,6 +52,12 @@ class SparkJobTrigger(BaseTrigger):
             {
                 "spark_conn_id": self.spark_conn_id,
                 "auth_conn_id": self.auth_conn_id,
+                "spark_base_url": self.spark_base_url,
+                "auth_url": self.auth_url,
+                "auth_body": self.auth_body,
+                "auth_headers": self.auth_headers,
+                "request_timeout": self.request_timeout,
+                "verify": self.verify,
                 "workspace_id": self.workspace_id,
                 "job_id": self.job_id,
                 "poll_interval": self.poll_interval,
@@ -114,6 +132,12 @@ class SparkJobTrigger(BaseTrigger):
         return SparkHook(
             spark_conn_id=self.spark_conn_id,
             auth_conn_id=self.auth_conn_id,
+            spark_base_url=self.spark_base_url,
+            auth_url=self.auth_url,
+            auth_body=self.auth_body,
+            auth_headers=self.auth_headers,
+            request_timeout=self.request_timeout,
+            verify=self.verify,
             workspace_id=self.workspace_id,
         )
 
@@ -129,4 +153,3 @@ def _compact_detail(detail: dict[str, Any]) -> dict[str, Any]:
         "log_url",
     )
     return {key: detail.get(key) for key in keys if key in detail}
-

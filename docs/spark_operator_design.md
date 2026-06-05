@@ -88,9 +88,13 @@ sequenceDiagram
 ### 2.2 用户侧使用流程
 
 1. DAG 开发者在 DAG 文件中引入 `SparkOperator`。
-2. 配置 Airflow Connection：
-   - Spark API base URL。
-   - token 获取接口占位配置：`auth_url`、`auth_body`、`auth_headers`。
+2. 测试环境直接在 Operator 参数中配置 Spark API 与 token 获取接口：
+   - `spark_base_url`
+   - `auth_url`
+   - `auth_body`
+   - `auth_headers`
+   - `request_timeout`
+   - `verify`
 3. DAG 参数中声明：
    - `workspace_id`
    - `name`
@@ -481,19 +485,37 @@ spark_sql_scripting_parameter={
 
 ## 5. Operator 参数设计
 
-### 5.1 连接参数
+### 5.1 连接与接口配置参数
 
 ```python
-spark_conn_id: str
-auth_conn_id: str | None
+spark_base_url: str | None = None
+auth_url: str | None = None
+auth_body: dict | None = None
+auth_headers: dict | None = None
+request_timeout: int = 30
+verify: bool = True
+spark_conn_id: str | None = None
+auth_conn_id: str | None = None
 workspace_id: str
 ```
 
 说明：
 
-- `spark_conn_id`：Spark API 地址配置。
-- `auth_conn_id`：token 获取接口配置；为空时复用 `spark_conn_id`。
+- `spark_base_url`：Spark API base URL，测试环境推荐直接传入。
+- `auth_url`：token 获取接口 URL，测试环境推荐直接传入。
+- `auth_body`：token 获取接口 POST body。
+- `auth_headers`：token 获取接口额外 Header。
+- `request_timeout`：Spark API 与 token API 请求超时时间。
+- `verify`：HTTPS 证书校验开关。
+- `spark_conn_id`：未传直接配置时，从 Airflow Connection 读取 Spark API 地址。
+- `auth_conn_id`：未传直接配置时，从 Airflow Connection 读取 token 配置；为空时复用 `spark_conn_id`。
 - `workspace_id`：Spark API 路径参数。
+
+配置优先级：
+
+1. 同时传入 `spark_base_url` 和 `auth_url` 时，使用直接配置模式，不读取 Airflow Connection。
+2. 未传完整直接配置时，回退到 Connection 模式。
+3. Connection 模式下默认使用 `aidatalake_spark`。
 
 Connection Extra 示例：
 
@@ -893,15 +915,16 @@ SparkJobTrigger.cleanup()
 from airflow.sdk import BaseOperator
 ```
 
-### 12.2 Connection 读取
+### 12.2 配置读取
 
-优先使用 Airflow 3.0 公共接口读取 Connection。
+优先使用 Operator 直接配置；未传完整直接配置时，使用 Airflow 3.0 公共接口读取 Connection。
 
 设计目标：
 
 - 避免直接访问 Airflow 元数据库。
 - 避免使用 Airflow 2.x 内部路径。
-- Hook 层负责 Connection 读取，Operator 不直接读取连接。
+- Hook 层负责组装客户端，Operator 不直接读取连接。
+- 测试环境可完全绕过 Airflow Connection。
 
 ### 12.3 Trigger
 
@@ -909,13 +932,19 @@ Trigger 只序列化必要字段：
 
 ```python
 {
-  "spark_conn_id": "aidatalake_spark",
-  "auth_conn_id": "aidatalake_auth",
+  "spark_conn_id": None,
+  "auth_conn_id": None,
+  "spark_base_url": "https://spark-api.example.com",
+  "auth_url": "https://auth.example.com/v3/auth/tokens",
+  "auth_body": {"TODO": "token request body"},
+  "auth_headers": {},
+  "request_timeout": 30,
+  "verify": True,
   "workspace_id": "...",
   "job_id": "...",
   "poll_interval": 30,
   "max_poll_failures": 10,
-  "fetch_detail_on_poll": true
+  "fetch_detail_on_poll": True
 }
 ```
 
@@ -927,6 +956,8 @@ Trigger 不序列化：
 - Client 实例
 - Connection 对象
 
+说明：直接配置模式下，`auth_body` 与 `auth_headers` 会进入 Trigger 序列化参数。测试环境接受该方式；生产环境如包含敏感凭证，建议使用 Connection 模式。
+
 ## 13. 示例 DAG
 
 ```python
@@ -935,23 +966,19 @@ from airflow_provider_aidatalake.operators.spark import SparkOperator
 
 with DAG(dag_id="spark_operator_example") as dag:
     SparkOperator(
-        task_id="spark_python_task",
-        spark_conn_id="aidatalake_spark",
-        auth_conn_id="aidatalake_auth",
+        task_id="spark_jar_task",
+        spark_base_url="https://spark-api.example.com",
+        auth_url="https://auth.example.com/v3/auth/tokens",
+        auth_body={"TODO": "token request body"},
+        auth_headers={},
         workspace_id="12345678-1234-1234-1234-123456789012",
-        name="spark-python-demo",
+        name="spark-jar-demo",
         endpoint_name="endpoint1",
         spark_version="3.3.2",
-        job_type="spark_python_job",
-        spark_py_parameter={
-            "main_python_file": "/mnt/OBS/demo/jobs/main.py",
-            "main_args": [
-                "--input",
-                "/mnt/OBS/demo/input",
-                "--output",
-                "/mnt/OBS/demo/output",
-            ],
-            "dependency_py_files": ["/mnt/OBS/demo/libs/common.zip"],
+        spark_jar_parameter={
+            "main_class": "com.example.Main",
+            "main_jar": "/mnt/OBS/demo/jars/main.jar",
+            "main_args": ["--input", "/mnt/OBS/demo/input"],
         },
         resource_config={
             "executor_number": 4,
@@ -1035,4 +1062,3 @@ Trigger：
 5. `spark_sql_scripting_job` 本期是正式开放，还是仅保留结构并默认禁用。
 6. `log_url` 是否只写入 Spark API 返回的 OBS 路径，还是必须继续调用 WorkspaceCoreService 生成下载链接。
 7. Python 包名是否确定为 `airflow_provider_aidatalake`。
-

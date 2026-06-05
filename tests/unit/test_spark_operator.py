@@ -25,3 +25,31 @@ def test_spark_operator_defaults_to_jar_job_and_builds_payload():
         "obs://bucket/input",
     ]
 
+
+def test_spark_operator_accepts_direct_config():
+    operator = SparkOperator(
+        task_id="spark_jar",
+        spark_base_url="https://spark-api.example.com",
+        auth_url="https://auth.example.com/token",
+        auth_body={"auth": "body"},
+        auth_headers={"X-Test": "1"},
+        request_timeout=12,
+        verify=False,
+        workspace_id="workspace-1",
+        name="demo",
+        endpoint_name="endpoint1",
+        spark_version="3.3.2",
+        spark_jar_parameter={
+            "main_class": "com.example.Main",
+            "main_jar": "obs://bucket/main.jar",
+        },
+    )
+
+    hook = operator._hook()
+
+    assert hook.spark_base_url == "https://spark-api.example.com"
+    assert hook.auth_url == "https://auth.example.com/token"
+    assert hook.auth_body == {"auth": "body"}
+    assert hook.auth_headers == {"X-Test": "1"}
+    assert hook.request_timeout == 12
+    assert hook.verify is False

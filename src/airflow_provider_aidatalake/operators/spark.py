@@ -39,6 +39,10 @@ class SparkOperator(BaseOperator):
         "spark_jar_parameter",
         "spark_py_parameter",
         "spark_sql_scripting_parameter",
+        "spark_base_url",
+        "auth_url",
+        "auth_body",
+        "auth_headers",
         "resource_config",
         "spark_config",
         "image_config",
@@ -50,8 +54,14 @@ class SparkOperator(BaseOperator):
     def __init__(
         self,
         *,
-        spark_conn_id: str = "aidatalake_spark",
+        spark_conn_id: str | None = None,
         auth_conn_id: str | None = None,
+        spark_base_url: str | None = None,
+        auth_url: str | None = None,
+        auth_body: dict[str, Any] | None = None,
+        auth_headers: dict[str, str] | None = None,
+        request_timeout: int = 30,
+        verify: bool = True,
         workspace_id: str,
         name: str,
         endpoint_name: str,
@@ -81,6 +91,12 @@ class SparkOperator(BaseOperator):
         super().__init__(**kwargs)
         self.spark_conn_id = spark_conn_id
         self.auth_conn_id = auth_conn_id
+        self.spark_base_url = spark_base_url
+        self.auth_url = auth_url
+        self.auth_body = auth_body
+        self.auth_headers = auth_headers
+        self.request_timeout = request_timeout
+        self.verify = verify
         self.workspace_id = workspace_id
         self.name = name
         self.endpoint_name = endpoint_name
@@ -131,6 +147,12 @@ class SparkOperator(BaseOperator):
                 trigger=SparkJobTrigger(
                     spark_conn_id=self.spark_conn_id,
                     auth_conn_id=self.auth_conn_id,
+                    spark_base_url=self.spark_base_url,
+                    auth_url=self.auth_url,
+                    auth_body=self.auth_body,
+                    auth_headers=self.auth_headers,
+                    request_timeout=self.request_timeout,
+                    verify=self.verify,
                     workspace_id=self.workspace_id,
                     job_id=job_id,
                     poll_interval=self.poll_interval,
@@ -278,6 +300,12 @@ class SparkOperator(BaseOperator):
         return SparkHook(
             spark_conn_id=self.spark_conn_id,
             auth_conn_id=self.auth_conn_id,
+            spark_base_url=self.spark_base_url,
+            auth_url=self.auth_url,
+            auth_body=self.auth_body,
+            auth_headers=self.auth_headers,
+            request_timeout=self.request_timeout,
+            verify=self.verify,
             workspace_id=self.workspace_id,
         )
 
@@ -286,4 +314,3 @@ class SparkOperator(BaseOperator):
         task_instance = context.get("ti") or context.get("task_instance")
         if task_instance is not None:
             task_instance.xcom_push(key=key, value=value)
-

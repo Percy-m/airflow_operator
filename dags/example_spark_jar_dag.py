@@ -20,8 +20,10 @@ with DAG(
 ) as dag:
     SparkOperator(
         task_id="spark_jar_task",
-        spark_conn_id="aidatalake_spark",
-        auth_conn_id="aidatalake_auth",
+        spark_base_url="https://spark-api.example.com",
+        auth_url="https://auth.example.com/v3/auth/tokens",
+        auth_body={"TODO": "token request body"},
+        auth_headers={},
         workspace_id="12345678-1234-1234-1234-123456789012",
         name="spark-jar-demo",
         endpoint_name="endpoint1",
@@ -48,4 +50,3 @@ with DAG(
         deferrable=True,
         poll_interval=30,
     )
-
