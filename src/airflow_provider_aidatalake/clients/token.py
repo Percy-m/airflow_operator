@@ -54,8 +54,7 @@ class TokenProvider:
             headers=headers,
             json=self.auth_body,
             expected_statuses={200, 201, 204},
-            retry=2,
-            retry_backoff=(1.0, 2.0),
+            retry=0,
         )
         token = response.headers.get("x-subject-token")
         if not token:

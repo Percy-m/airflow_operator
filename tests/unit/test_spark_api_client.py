@@ -30,8 +30,7 @@ def test_create_job_uses_spark_api_and_auth_header():
         },
         json={"name": "demo"},
         expected_statuses={201},
-        retry=3,
-        retry_backoff=(1.0, 2.0, 4.0),
+        retry=0,
     )
 
 
@@ -68,7 +67,5 @@ def test_cancel_job_uses_cancel_endpoint():
         "/v2/workspaces/workspace-1/spark-jobs/job-1/cancel",
         headers={"X-Auth-Token": "token-1", "Content-Type": "application/json"},
         expected_statuses={204},
-        retry=2,
-        retry_backoff=(1.0, 2.0),
+        retry=0,
     )
-

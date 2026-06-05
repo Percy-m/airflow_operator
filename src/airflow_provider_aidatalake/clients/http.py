@@ -67,11 +67,12 @@ class HttpClient:
                 )
                 cost_ms = int((time.perf_counter() - start_time) * 1000)
                 log.info(
-                    "HTTP response received method=%s url=%s status_code=%s cost_ms=%s",
+                    "HTTP response received method=%s url=%s status_code=%s cost_ms=%s response_body=%s",
                     method,
                     url,
                     response.status_code,
                     cost_ms,
+                    response.text,
                 )
                 if response.status_code in expected:
                     return response

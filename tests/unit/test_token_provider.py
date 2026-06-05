@@ -32,8 +32,7 @@ def test_token_provider_reads_x_subject_token_header():
         headers={"Content-Type": "application/json"},
         json={"auth": "body"},
         expected_statuses={200, 201, 204},
-        retry=2,
-        retry_backoff=(1.0, 2.0),
+        retry=0,
     )
 
 

@@ -32,8 +32,7 @@ class SparkApiClient:
             headers=headers,
             json=payload,
             expected_statuses={201},
-            retry=3,
-            retry_backoff=(1.0, 2.0, 4.0),
+            retry=0,
         )
         body = response.json()
         job_id = body.get("job_id")
@@ -67,8 +66,7 @@ class SparkApiClient:
             f"/v2/workspaces/{workspace_id}/spark-jobs/{job_id}/cancel",
             headers=self._auth_headers(),
             expected_statuses={204},
-            retry=2,
-            retry_backoff=(1.0, 2.0),
+            retry=0,
         )
 
     def _auth_headers(self) -> dict[str, str]:
@@ -87,4 +85,3 @@ class SparkApiClient:
             headers["X-Auth-Token"] = self.token_provider.refresh_token()
             kwargs["headers"] = headers
             return self.http_client.request(method, path, **kwargs)
-
