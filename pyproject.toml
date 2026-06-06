@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "airflow-provider-aidatalake"
 version = "0.1.0"
-description = "Airflow 3 provider for AiDatalake Spark jobs"
+description = "Airflow 3 provider for AiDatalake Spark and Ray jobs"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -21,6 +21,7 @@ test = [
 
 [project.entry-points.apache_airflow_provider]
 provider_info = "airflow_provider_aidatalake.provider_info:get_provider_info"
+ray_provider_info = "airflow_provider_aidatalake_ray.provider_info:get_provider_info"
 
 [tool.setuptools.packages.find]
 where = ["src"]
