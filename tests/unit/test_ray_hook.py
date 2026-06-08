@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from airflow_provider_aidatalake_ray.hooks.ray import RayHook
+from custom_operator.ray.hooks.ray import RayHook
 
 
 def test_ray_hook_direct_config_does_not_read_connection(monkeypatch):

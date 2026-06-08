@@ -1,6 +1,6 @@
 from unittest.mock import Mock
 
-from airflow_provider_aidatalake_ray.clients.ray_api import RayApiClient
+from custom_operator.ray.clients.ray_api import RayApiClient
 
 
 def test_create_job_uses_ray_api_and_auth_header():

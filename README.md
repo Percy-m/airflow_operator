@@ -2,15 +2,17 @@
 
 Airflow 3.0 custom provider for submitting, polling, and cancelling AiDatalake Spark and Ray jobs.
 
-Testing environments can configure endpoints directly on `SparkOperator`:
+Connection mode reads the API endpoint from the HTTP Connection host and reads
+`X-Auth-Token` from either `Connection.extra.token` or `Connection.password`.
+Testing environments can configure endpoints and tokens directly on the operators.
 
 ```python
+from custom_operator.spark.operators.spark import SparkOperator
+
 SparkOperator(
     task_id="spark_jar_task",
     spark_base_url="https://spark-api.example.com",
-    auth_url="https://auth.example.com/v3/auth/tokens",
-    auth_body={"TODO": "token request body"},
-    auth_headers={},
+    token="{{ var.value.test_spark_token }}",
     workspace_id="12345678-1234-1234-1234-123456789012",
     name="spark-jar-demo",
     endpoint_name="endpoint1",
@@ -28,12 +30,12 @@ See `docs/spark_operator_design.md` for the full design.
 
 ## Ray Operator
 
-Ray code is isolated from the existing Spark package under `src/airflow_provider_aidatalake_ray`.
+Ray code is isolated from Spark under `src/custom_operator/ray`.
 
-Connection mode reads the API endpoint from the HTTP Connection host and reads `X-Auth-Token` from either `Connection.password` or `Connection.extra.token`:
+Connection mode uses the same static token rules:
 
 ```python
-from airflow_provider_aidatalake_ray.operators.ray import RayOperator
+from custom_operator.ray.operators.ray import RayOperator
 
 RayOperator(
     task_id="ray_train",

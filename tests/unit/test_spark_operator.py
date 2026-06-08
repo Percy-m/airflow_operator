@@ -1,4 +1,4 @@
-from airflow_provider_aidatalake.operators.spark import SparkOperator
+from custom_operator.spark.operators.spark import SparkOperator
 
 
 def test_spark_operator_defaults_to_jar_job_and_builds_payload():
@@ -30,9 +30,7 @@ def test_spark_operator_accepts_direct_config():
     operator = SparkOperator(
         task_id="spark_jar",
         spark_base_url="https://spark-api.example.com",
-        auth_url="https://auth.example.com/token",
-        auth_body={"auth": "body"},
-        auth_headers={"X-Test": "1"},
+        token="test-token",
         request_timeout=12,
         verify=False,
         workspace_id="workspace-1",
@@ -48,8 +46,6 @@ def test_spark_operator_accepts_direct_config():
     hook = operator._hook()
 
     assert hook.spark_base_url == "https://spark-api.example.com"
-    assert hook.auth_url == "https://auth.example.com/token"
-    assert hook.auth_body == {"auth": "body"}
-    assert hook.auth_headers == {"X-Test": "1"}
+    assert hook.token == "test-token"
     assert hook.request_timeout == 12
     assert hook.verify is False

@@ -1,6 +1,6 @@
 from unittest.mock import Mock
 
-from airflow_provider_aidatalake.clients.spark_api import SparkApiClient
+from custom_operator.spark.clients.spark_api import SparkApiClient
 
 
 def test_create_job_uses_spark_api_and_auth_header():
@@ -43,7 +43,7 @@ def test_create_job_logs_request_path_headers_and_body(caplog):
     token_provider.get_token.return_value = "abcdef-token"
     client = SparkApiClient(http_client=http_client, token_provider=token_provider)
 
-    with caplog.at_level("INFO", logger="airflow_provider_aidatalake.clients.spark_api"):
+    with caplog.at_level("INFO", logger="custom_operator.spark.clients.spark_api"):
         client.create_job(
             workspace_id="workspace-1",
             payload={"name": "demo"},

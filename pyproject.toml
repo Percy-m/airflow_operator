@@ -20,8 +20,8 @@ test = [
 ]
 
 [project.entry-points.apache_airflow_provider]
-provider_info = "airflow_provider_aidatalake.provider_info:get_provider_info"
-ray_provider_info = "airflow_provider_aidatalake_ray.provider_info:get_provider_info"
+spark_provider_info = "custom_operator.spark.provider_info:get_provider_info"
+ray_provider_info = "custom_operator.ray.provider_info:get_provider_info"
 
 [tool.setuptools.packages.find]
 where = ["src"]

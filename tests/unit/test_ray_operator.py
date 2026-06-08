@@ -1,4 +1,4 @@
-from airflow_provider_aidatalake_ray.operators.ray import RayOperator
+from custom_operator.ray.operators.ray import RayOperator
 
 
 def test_ray_operator_builds_api_payload_and_converts_runtime_env_paths_only():

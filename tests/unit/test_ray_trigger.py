@@ -1,4 +1,4 @@
-from airflow_provider_aidatalake_ray.triggers.ray import RayJobTrigger
+from custom_operator.ray.triggers.ray import RayJobTrigger
 
 
 def test_ray_trigger_serializes_without_token_for_connection_mode():
@@ -10,7 +10,7 @@ def test_ray_trigger_serializes_without_token_for_connection_mode():
 
     classpath, kwargs = trigger.serialize()
 
-    assert classpath == "airflow_provider_aidatalake_ray.triggers.ray.RayJobTrigger"
+    assert classpath == "custom_operator.ray.triggers.ray.RayJobTrigger"
     assert kwargs["job_id"] == "ray-job-1"
     assert "token" not in kwargs
 

@@ -1,4 +1,4 @@
-from airflow_provider_aidatalake.utils.obs_path import convert_obs_paths
+from custom_operator.spark.utils.obs_path import convert_obs_paths
 
 
 def test_convert_local_obs_path_string():
