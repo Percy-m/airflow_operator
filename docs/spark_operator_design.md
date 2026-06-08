@@ -15,9 +15,8 @@
 - 不再调用 FE/SF 文档中提到的算力网关接口。
 - Spark 作业创建、查询、取消直接调用 `AiDatalake-API-Spark-Specification` 中的 Spark 作业相关 API。
 - 不再使用文档旧方案中的固定网关 Token。
-- 每次访问 Spark API 前，通过 token 获取接口拿到 token。
-- token 获取接口为 `POST` 请求，真实 URL 和 body 待实现。
-- token 从响应 Header `x-subject-token` 获取。
+- SparkOperator 不负责动态获取 token，只接收显式 `token`，或从 Spark Airflow Connection 的 `extra.token`/`password` 读取静态 token。
+- 动态 token 获取由独立 `TokenOperator` 完成，调用 `auth_url + auth_body`，并从响应 Header `x-subject-token` 获取 token。
 - 后续 Spark API 请求统一添加 Header：`X-Auth-Token: {token}`。
 
 ## 2. 总体业务流程
@@ -32,23 +31,24 @@ sequenceDiagram
     participant Worker as Airflow Worker
     participant Operator as SparkOperator
     participant Hook as SparkHook
-    participant TokenProvider as TokenProvider
     participant SparkAPI as AiDatalake Spark API
+    participant TokenTask as TokenOperator
+    participant AuthAPI as Auth API
     participant Triggerer as Airflow Triggerer
     participant Trigger as SparkJobTrigger
 
-    User->>Scheduler: 提交/更新 DAG，声明 SparkOperator
+    User->>Scheduler: 提交/更新 DAG，声明 TokenOperator -> SparkOperator
+    Scheduler->>Worker: 调度 TokenOperator task instance
+    Worker->>TokenTask: execute(context)
+    TokenTask->>AuthAPI: POST auth_url, body=auth_body
+    AuthAPI-->>TokenTask: Header x-subject-token
+    TokenTask-->>Worker: return token through XCom
     Scheduler->>Worker: 调度 SparkOperator task instance
     Worker->>Operator: execute(context)
 
     Operator->>Operator: 校验 Operator 参数
     Operator->>Operator: 转换 OBS 本地挂载路径
     Operator->>Hook: submit_job(payload)
-
-    Hook->>TokenProvider: get_token()
-    TokenProvider->>SparkAPI: POST token接口，body待实现
-    SparkAPI-->>TokenProvider: Header x-subject-token
-    TokenProvider-->>Hook: token
 
     Hook->>SparkAPI: POST /v2/workspaces/{workspace_id}/spark-jobs
     Note right of Hook: Header: X-Auth-Token={token}
@@ -61,9 +61,6 @@ sequenceDiagram
         Operator->>Triggerer: defer(trigger=SparkJobTrigger)
         Triggerer->>Trigger: run()
         Trigger->>Hook: poll job state
-        Hook->>TokenProvider: get_token()
-        TokenProvider->>SparkAPI: POST token接口
-        SparkAPI-->>TokenProvider: Header x-subject-token
         loop 每 poll_interval 秒
             Hook->>SparkAPI: GET /v2/workspaces/{workspace_id}/spark-jobs/{job_id}/state
             SparkAPI-->>Hook: 200 {job_id,state}
@@ -88,27 +85,28 @@ sequenceDiagram
 ### 2.2 用户侧使用流程
 
 1. DAG 开发者在 DAG 文件中引入 `SparkOperator`。
-2. 测试环境直接在 Operator 参数中配置 Spark API 与 token 获取接口：
-   - `spark_base_url`
+2. 测试环境通过上游 `TokenOperator` 获取 token，并通过 XCom 模板传给 SparkOperator：
    - `auth_url`
    - `auth_body`
-   - `auth_headers`
+3. SparkOperator 参数中配置 Spark API 与静态 token：
+   - `spark_base_url`
+   - `token`
    - `request_timeout`
    - `verify`
-3. DAG 参数中声明：
+4. DAG 参数中声明：
    - `workspace_id`
    - `name`
    - `endpoint_name`
    - `spark_version`
    - `job_type`
    - 对应作业类型参数。
-4. Airflow 调度执行 task。
-5. Operator 提交远端 Spark 作业。
-6. Operator 进入异步等待。
-7. Trigger 轮询远端状态。
-8. Spark 作业成功时 Airflow task 成功。
-9. Spark 作业失败、取消或超时时 Airflow task 失败。
-10. 用户在 Airflow UI 可通过 XCom 或日志看到 `job_id`、`spark_state`、`log_url`。
+5. Airflow 调度执行 task。
+6. Operator 提交远端 Spark 作业。
+7. Operator 进入异步等待。
+8. Trigger 轮询远端状态。
+9. Spark 作业成功时 Airflow task 成功。
+10. Spark 作业失败、取消或超时时 Airflow task 失败。
+11. 用户在 Airflow UI 可通过 XCom 或日志看到 `job_id`、`spark_state`、`log_url`。
 
 ## 3. 外部接口调用设计
 
@@ -120,11 +118,10 @@ sequenceDiagram
 POST {auth_url}
 ```
 
-请求 Header：
+请求 Header 固定为：
 
 ```text
 Content-Type: application/json
-{auth_headers}
 ```
 
 请求 Body：
@@ -147,8 +144,8 @@ x-subject-token: {token}
 - 不从响应 Body 获取 token。
 - Header 名大小写不敏感。
 - 缺少 `x-subject-token` 时抛出认证异常。
-- token 不写入 XCom。
-- token 不序列化到 Trigger 参数。
+- TokenOperator 会将 token 作为普通返回值写入 XCom，供测试/编排 DAG 通过模板传给 SparkOperator。
+- SparkOperator deferrable 模式在显式 token 模式下会将 token 序列化到 Trigger 参数。
 - token 不打印日志。
 
 ### 3.2 创建 Spark 作业
@@ -489,41 +486,33 @@ spark_sql_scripting_parameter={
 
 ```python
 spark_base_url: str | None = None
-auth_url: str | None = None
-auth_body: dict | None = None
-auth_headers: dict | None = None
+token: str | None = None
 request_timeout: int = 30
 verify: bool = True
 spark_conn_id: str | None = None
-auth_conn_id: str | None = None
 workspace_id: str
 ```
 
 说明：
 
 - `spark_base_url`：Spark API base URL，测试环境推荐直接传入。
-- `auth_url`：token 获取接口 URL，测试环境推荐直接传入。
-- `auth_body`：token 获取接口 POST body。
-- `auth_headers`：token 获取接口额外 Header。
-- `request_timeout`：Spark API 与 token API 请求超时时间。
+- `token`：静态 `X-Auth-Token`，可来自上游 TokenOperator 的 XCom 模板。
+- `request_timeout`：Spark API 请求超时时间。
 - `verify`：HTTPS 证书校验开关。
 - `spark_conn_id`：未传直接配置时，从 Airflow Connection 读取 Spark API 地址。
-- `auth_conn_id`：未传直接配置时，从 Airflow Connection 读取 token 配置；为空时复用 `spark_conn_id`。
 - `workspace_id`：Spark API 路径参数。
 
 配置优先级：
 
-1. 同时传入 `spark_base_url` 和 `auth_url` 时，使用直接配置模式，不读取 Airflow Connection。
-2. 未传完整直接配置时，回退到 Connection 模式。
+1. 同时传入 `spark_base_url` 和 `token` 时，使用直接配置模式，不读取 Airflow Connection。
+2. 未传完整直接配置时，回退到 Spark Connection 模式。
 3. Connection 模式下默认使用 `aidatalake_spark`。
 
 Connection Extra 示例：
 
 ```json
 {
-  "auth_url": "TODO",
-  "auth_body": {},
-  "auth_headers": {},
+  "token": "TODO",
   "timeout": 30,
   "verify": true
 }
@@ -623,10 +612,9 @@ src/
 | 层 | 模块 | 职责 |
 | --- | --- | --- |
 | Operator | `operators/spark.py` | Airflow task 生命周期、参数接收、XCom、defer、execute_complete |
-| Hook | `hooks/spark.py` | Airflow Connection 读取，组合 TokenProvider 和 SparkApiClient |
+| Hook | `hooks/spark.py` | 解析 Spark 连接与静态 token，组合 SparkApiClient |
 | Trigger | `triggers/spark.py` | Triggerer 异步轮询，终态事件，cleanup 取消 |
 | Client | `clients/spark_api.py` | Spark API URL 拼接、请求、响应解析 |
-| Token | `clients/token.py` | POST 获取 token，从 Header 提取 `x-subject-token` |
 | HTTP | `clients/http_client.py` | requests/aiohttp 封装、超时、重试、错误映射 |
 | Model | `models/spark.py` | 状态枚举、作业类型、事件结构 |
 | Utils | `utils/obs_path.py` | OBS 路径转换 |
@@ -664,17 +652,10 @@ classDiagram
         +cancel_job(workspace_id,job_id)
     }
 
-    class TokenProvider {
-        +get_token()
-        +refresh_token()
-    }
-
     SparkOperator --> SparkHook
     SparkOperator --> SparkJobTrigger
     SparkJobTrigger --> SparkHook
     SparkHook --> SparkApiClient
-    SparkHook --> TokenProvider
-    SparkApiClient --> TokenProvider
 ```
 
 ## 7. 详细调用逻辑
@@ -691,11 +672,9 @@ SparkOperator.execute(context)
   6. 构建 Spark API 请求 payload
   7. 生成 X-Client-Token
   8. SparkHook.submit_job(payload, client_token)
-      8.1 TokenProvider.get_token()
-      8.2 POST token接口
-      8.3 从 Header x-subject-token 取 token
-      8.4 POST /v2/workspaces/{workspace_id}/spark-jobs
-      8.5 解析 job_id
+      8.1 使用静态 token 构造 X-Auth-Token
+      8.2 POST /v2/workspaces/{workspace_id}/spark-jobs
+      8.3 解析 job_id
   9. XCom 写入 job_id
   10. XCom 写入 spark_state=PENDING
   11. deferrable=True:
@@ -885,9 +864,6 @@ SparkJobTrigger.cleanup()
 | 参数校验开始 | `action=validate_start, dag_id, task_id, job_type` |
 | 参数校验失败 | `action=validate_failed, errors` |
 | OBS 路径转换 | `action=obs_path_convert, original, converted` |
-| token 获取开始 | `action=token_request_start, auth_url` |
-| token 获取成功 | `action=token_request_success` |
-| token 获取失败 | `action=token_request_failed, status_code, error` |
 | 作业提交开始 | `action=spark_submit_start, workspace_id, name, endpoint_name` |
 | 作业提交成功 | `action=spark_submit_success, job_id` |
 | 作业提交失败 | `action=spark_submit_failed, status_code, error_code, request_id` |
@@ -933,11 +909,8 @@ Trigger 只序列化必要字段：
 ```python
 {
   "spark_conn_id": None,
-  "auth_conn_id": None,
   "spark_base_url": "https://spark-api.example.com",
-  "auth_url": "https://auth.example.com/v3/auth/tokens",
-  "auth_body": {"TODO": "token request body"},
-  "auth_headers": {},
+  "token": "{{ ti.xcom_pull(task_ids='test_token') }}",
   "request_timeout": 30,
   "verify": True,
   "workspace_id": "...",
@@ -950,27 +923,31 @@ Trigger 只序列化必要字段：
 
 Trigger 不序列化：
 
-- token
 - HTTP session
 - Hook 实例
 - Client 实例
 - Connection 对象
 
-说明：直接配置模式下，`auth_body` 与 `auth_headers` 会进入 Trigger 序列化参数。测试环境接受该方式；生产环境如包含敏感凭证，建议使用 Connection 模式。
+说明：显式 token 模式下，token 会作为静态字符串进入 Trigger 序列化参数；生产环境如不希望 token 进入 XCom/Trigger 参数，建议使用 Spark Connection 的 `extra.token` 或 `password`。
 
 ## 13. 示例 DAG
 
 ```python
 from airflow.sdk import DAG
 from airflow_provider_aidatalake.operators.spark import SparkOperator
+from custom_operator.token.operators.token import TokenOperator
 
 with DAG(dag_id="spark_operator_example") as dag:
-    SparkOperator(
-        task_id="spark_jar_task",
-        spark_base_url="https://spark-api.example.com",
+    test_token = TokenOperator(
+        task_id="test_token",
         auth_url="https://auth.example.com/v3/auth/tokens",
         auth_body={"TODO": "token request body"},
-        auth_headers={},
+    )
+
+    test_spark = SparkOperator(
+        task_id="test_spark",
+        spark_base_url="https://spark-api.example.com",
+        token="{{ ti.xcom_pull(task_ids='test_token') }}",
         workspace_id="12345678-1234-1234-1234-123456789012",
         name="spark-jar-demo",
         endpoint_name="endpoint1",
@@ -993,6 +970,8 @@ with DAG(dag_id="spark_operator_example") as dag:
         deferrable=True,
         poll_interval=30,
     )
+
+    test_token >> test_spark
 ```
 
 ## 14. 测试设计

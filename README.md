@@ -9,15 +9,16 @@ fetch the token in a separate task and pass that XCom value into Spark or Ray.
 from custom_operator.spark.operators.spark import SparkOperator
 from custom_operator.token.operators.token import TokenOperator
 
-task_token = TokenOperator(
-    task_id="task_token",
-    token_conn_id="aidatalake_token",
+test_token = TokenOperator(
+    task_id="test_token",
+    auth_url="https://auth-api.example.com/v3/auth/tokens",
+    auth_body={"auth": {"identity": {"methods": ["password"]}}},
 )
 
-task_spark = SparkOperator(
-    task_id="spark_jar_task",
+test_spark = SparkOperator(
+    task_id="test_spark",
     spark_base_url="https://spark-api.example.com",
-    token="{{ ti.xcom_pull(task_ids='task_token') }}",
+    token="{{ ti.xcom_pull(task_ids='test_token') }}",
     workspace_id="12345678-1234-1234-1234-123456789012",
     name="spark-jar-demo",
     endpoint_name="endpoint1",
@@ -28,10 +29,10 @@ task_spark = SparkOperator(
     },
 )
 
-task_token >> task_spark
+test_token >> test_spark
 ```
 
-`TokenOperator` calls the configured auth API and reads `x-subject-token` from the response header.
+`TokenOperator` calls `auth_url` with `auth_body` and reads `x-subject-token` from the response header.
 
 See `docs/spark_operator_design.md` for the full design.
 
@@ -45,15 +46,16 @@ Ray uses the same task-to-task token flow:
 from custom_operator.ray.operators.ray import RayOperator
 from custom_operator.token.operators.token import TokenOperator
 
-task_token = TokenOperator(
-    task_id="task_token",
-    token_conn_id="aidatalake_token",
+test_token = TokenOperator(
+    task_id="test_token",
+    auth_url="https://auth-api.example.com/v3/auth/tokens",
+    auth_body={"auth": {"identity": {"methods": ["password"]}}},
 )
 
-task_ray = RayOperator(
-    task_id="ray_train",
+test_ray = RayOperator(
+    task_id="test_ray",
     ray_base_url="https://ray-api.example.com",
-    token="{{ ti.xcom_pull(task_ids='task_token') }}",
+    token="{{ ti.xcom_pull(task_ids='test_token') }}",
     workspace_id="12345678-1234-1234-1234-123456789012",
     name="ray-train-demo",
     endpoint_name="ray",
@@ -65,5 +67,5 @@ task_ray = RayOperator(
     },
 )
 
-task_token >> task_ray
+test_token >> test_ray
 ```

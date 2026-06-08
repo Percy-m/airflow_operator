@@ -21,7 +21,20 @@ with DAG(
 ) as dag:
     test_token = TokenOperator(
         task_id="test_token",
-        token_conn_id="aidatalake_token",
+        auth_url="https://auth-api.example.com/v3/auth/tokens",
+        auth_body={
+            "auth": {
+                "identity": {
+                    "methods": ["password"],
+                    "password": {
+                        "user": {
+                            "name": "demo-user",
+                            "password": "demo-password",
+                        }
+                    },
+                }
+            }
+        },
     )
 
     test_spark = SparkOperator(

@@ -22,19 +22,6 @@ def mask_token(token: str | None) -> str:
     return f"{token[:5]}***"
 
 
-class StaticTokenProvider:
-    """Provides a fixed X-Auth-Token from DAG config or Airflow Connection."""
-
-    def __init__(self, token: str) -> None:
-        self._token = token
-
-    def get_token(self) -> str:
-        return self._token
-
-    def refresh_token(self) -> str:
-        return self._token
-
-
 class TokenProvider:
     """Fetches X-Auth-Token values from an auth API response header."""
 
@@ -43,15 +30,13 @@ class TokenProvider:
         *,
         http_client: HttpClient,
         auth_url: str,
-        auth_body: Mapping[str, Any] | None = None,
-        auth_headers: Mapping[str, str] | None = None,
+        auth_body: Mapping[str, Any],
     ) -> None:
         if not auth_url:
             raise CustomOperatorAuthError("auth_url must be configured")
         self.http_client = http_client
         self.auth_url = auth_url
-        self.auth_body = dict(auth_body or {})
-        self.auth_headers = dict(auth_headers or {})
+        self.auth_body = dict(auth_body)
         self._token: str | None = None
 
     def get_token(self) -> str:
@@ -60,7 +45,7 @@ class TokenProvider:
         return self.refresh_token()
 
     def refresh_token(self) -> str:
-        headers = {"Content-Type": "application/json", **self.auth_headers}
+        headers = {"Content-Type": "application/json"}
         log.info("Requesting auth token auth_url=%s", self.auth_url)
         response = self.http_client.request(
             "POST",
