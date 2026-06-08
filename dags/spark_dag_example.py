@@ -10,6 +10,7 @@ from datetime import datetime
 from airflow.sdk import DAG
 
 from custom_operator.spark.operators.spark import SparkOperator
+from custom_operator.token.operators.token import TokenOperator
 
 
 with DAG(
@@ -18,10 +19,15 @@ with DAG(
     schedule=None,
     catchup=False,
 ) as dag:
-    SparkOperator(
+    task_token = TokenOperator(
+        task_id="task_token",
+        token_conn_id="aidatalake_token",
+    )
+
+    task_spark = SparkOperator(
         task_id="spark_jar_task",
         spark_base_url="https://spark-api.example.com",
-        token="{{ var.value.test_spark_token }}",
+        token="{{ ti.xcom_pull(task_ids='task_token') }}",
         workspace_id="12345678-1234-1234-1234-123456789012",
         name="spark-jar-demo",
         endpoint_name="endpoint1",
@@ -48,3 +54,5 @@ with DAG(
         deferrable=True,
         poll_interval=30,
     )
+
+    task_token >> task_spark

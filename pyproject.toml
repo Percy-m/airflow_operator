@@ -20,6 +20,7 @@ test = [
 ]
 
 [project.entry-points.apache_airflow_provider]
+token_provider_info = "custom_operator.token.provider_info:get_provider_info"
 spark_provider_info = "custom_operator.spark.provider_info:get_provider_info"
 ray_provider_info = "custom_operator.ray.provider_info:get_provider_info"
 

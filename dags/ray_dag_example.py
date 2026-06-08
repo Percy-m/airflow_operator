@@ -7,6 +7,7 @@ from datetime import datetime
 from airflow.sdk import DAG
 
 from custom_operator.ray.operators.ray import RayOperator
+from custom_operator.token.operators.token import TokenOperator
 
 
 with DAG(
@@ -15,11 +16,17 @@ with DAG(
     schedule=None,
     catchup=False,
 ) as dag:
-    ray_connection_task = RayOperator(
-        task_id="ray_connection_task",
-        ray_conn_id="aidatalake_ray",
+    task_token = TokenOperator(
+        task_id="task_token",
+        token_conn_id="aidatalake_token",
+    )
+
+    task_ray = RayOperator(
+        task_id="ray_task",
+        ray_base_url="https://ray-api.example.com",
+        token="{{ ti.xcom_pull(task_ids='task_token') }}",
         workspace_id="12345678-1234-1234-1234-123456789012",
-        name="ray-connection-demo",
+        name="ray-demo",
         endpoint_name="ray",
         entrypoint="python train.py --epochs 10",
         runtime_env={
@@ -37,21 +44,4 @@ with DAG(
         poll_interval=30,
     )
 
-    ray_direct_token_task = RayOperator(
-        task_id="ray_direct_token_task",
-        ray_base_url="https://ray-api.example.com",
-        token="{{ var.value.test_ray_token }}",
-        workspace_id="12345678-1234-1234-1234-123456789012",
-        name="ray-direct-token-demo",
-        endpoint_name="ray",
-        entrypoint="python hello.py",
-        runtime_env={
-            "working_dir": "/mnt/OBS/demo/ray/hello",
-            "pip": ["requests==2.32.3"],
-        },
-        entrypoint_num_cpus=1,
-        entrypoint_num_gpus=0,
-        entrypoint_memory=1073741824,
-        deferrable=True,
-        poll_interval=30,
-    )
+    task_token >> task_ray
