@@ -7,10 +7,10 @@ from typing import Any
 from airflow.sdk import BaseHook
 
 from custom_operator.spark.clients.spark_api import SparkApiClient
+from custom_operator.spark.connection import resolve_connection_config
+from custom_operator.spark.http_client import HttpClient
 from custom_operator.spark.models.spark import CANCELABLE_STATES, TERMINAL_STATES
-from custom_operator.token.connection import resolve_connection_config
-from custom_operator.token.http_client import HttpClient
-from custom_operator.token.token import StaticTokenProvider
+from custom_operator.spark.token import StaticTokenProvider
 
 
 class SparkHook(BaseHook):
@@ -83,7 +83,6 @@ class SparkHook(BaseHook):
             token=self.token,
             request_timeout=self.request_timeout,
             verify=self.verify,
-            service_name="Spark",
         )
         return SparkApiClient(
             http_client=HttpClient(

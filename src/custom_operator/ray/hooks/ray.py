@@ -7,11 +7,11 @@ from typing import Any
 from airflow.sdk import BaseHook
 
 from custom_operator.ray.clients.ray_api import RayApiClient
+from custom_operator.ray.connection import resolve_connection_config
 from custom_operator.ray.exceptions import AiDatalakeRayApiError
+from custom_operator.ray.http_client import HttpClient
 from custom_operator.ray.models.ray import CANCELABLE_STATES, TERMINAL_STATES, extract_job_state
-from custom_operator.token.connection import resolve_connection_config
-from custom_operator.token.http_client import HttpClient
-from custom_operator.token.token import StaticTokenProvider
+from custom_operator.ray.token import StaticTokenProvider
 
 
 class RayHook(BaseHook):
@@ -88,7 +88,6 @@ class RayHook(BaseHook):
             token=self.token,
             request_timeout=self.request_timeout,
             verify=self.verify,
-            service_name="Ray",
         )
         return RayApiClient(
             http_client=HttpClient(

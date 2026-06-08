@@ -6,9 +6,9 @@ import logging
 from typing import Any
 from uuid import uuid4
 
-from custom_operator.token.http_client import HttpClient
-from custom_operator.token.token import StaticTokenProvider, mask_token
 from custom_operator.ray.exceptions import AiDatalakeRayApiError
+from custom_operator.ray.http_client import HttpClient
+from custom_operator.ray.token import StaticTokenProvider, mask_token
 
 log = logging.getLogger(__name__)
 

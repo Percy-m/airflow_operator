@@ -16,15 +16,15 @@ with DAG(
     schedule=None,
     catchup=False,
 ) as dag:
-    task_token = TokenOperator(
-        task_id="task_token",
+    test_token = TokenOperator(
+        task_id="test_token",
         token_conn_id="aidatalake_token",
     )
 
-    task_ray = RayOperator(
-        task_id="ray_task",
+    test_ray = RayOperator(
+        task_id="test_ray",
         ray_base_url="https://ray-api.example.com",
-        token="{{ ti.xcom_pull(task_ids='task_token') }}",
+        token="{{ ti.xcom_pull(task_ids='test_token') }}",
         workspace_id="12345678-1234-1234-1234-123456789012",
         name="ray-demo",
         endpoint_name="ray",
@@ -44,4 +44,4 @@ with DAG(
         poll_interval=30,
     )
 
-    task_token >> task_ray
+    test_token >> test_ray

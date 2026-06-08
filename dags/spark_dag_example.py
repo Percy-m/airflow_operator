@@ -19,15 +19,15 @@ with DAG(
     schedule=None,
     catchup=False,
 ) as dag:
-    task_token = TokenOperator(
-        task_id="task_token",
+    test_token = TokenOperator(
+        task_id="test_token",
         token_conn_id="aidatalake_token",
     )
 
-    task_spark = SparkOperator(
-        task_id="spark_jar_task",
+    test_spark = SparkOperator(
+        task_id="test_spark",
         spark_base_url="https://spark-api.example.com",
-        token="{{ ti.xcom_pull(task_ids='task_token') }}",
+        token="{{ ti.xcom_pull(task_ids='test_token') }}",
         workspace_id="12345678-1234-1234-1234-123456789012",
         name="spark-jar-demo",
         endpoint_name="endpoint1",
@@ -55,4 +55,4 @@ with DAG(
         poll_interval=30,
     )
 
-    task_token >> task_spark
+    test_token >> test_spark

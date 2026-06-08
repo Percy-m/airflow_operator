@@ -1,5 +1,8 @@
 from types import SimpleNamespace
 
+import pytest
+
+from custom_operator.ray.exceptions import AiDatalakeRayAuthError
 from custom_operator.ray.hooks.ray import RayHook
 
 
@@ -61,3 +64,19 @@ def test_ray_hook_reads_token_from_connection_extra(monkeypatch):
     assert client.http_client.timeout == 15
     assert client.http_client.verify is False
     assert client.token_provider.get_token() == "extra-token"
+
+
+def test_ray_hook_requires_token(monkeypatch):
+    conn = SimpleNamespace(
+        host="ray-api.example.com",
+        schema="https",
+        port=None,
+        password=None,
+        extra_dejson={},
+    )
+    monkeypatch.setattr(RayHook, "get_connection", lambda self, conn_id: conn)
+
+    hook = RayHook(workspace_id="workspace-1", ray_conn_id="ray_conn")
+
+    with pytest.raises(AiDatalakeRayAuthError, match="Ray token must be configured"):
+        _ = hook.client
