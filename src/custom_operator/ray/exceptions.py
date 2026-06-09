@@ -2,33 +2,25 @@
 
 from __future__ import annotations
 
+from custom_operator.common.exceptions import (
+    AiDatalakeApiError as CommonAiDatalakeApiError,
+    AiDatalakeAuthError as CommonAiDatalakeAuthError,
+    AiDatalakeError as CommonAiDatalakeError,
+    AiDatalakeValidationError as CommonAiDatalakeValidationError,
+)
 
-class AiDatalakeRayError(Exception):
+
+class AiDatalakeRayError(CommonAiDatalakeError):
     """Base exception for AiDatalake Ray provider errors."""
 
 
-class AiDatalakeRayAuthError(AiDatalakeRayError):
+class AiDatalakeRayAuthError(CommonAiDatalakeAuthError, AiDatalakeRayError):
     """Raised when a Ray API token cannot be resolved."""
 
 
-class AiDatalakeRayApiError(AiDatalakeRayError):
+class AiDatalakeRayApiError(CommonAiDatalakeApiError, AiDatalakeRayError):
     """Raised when AiDatalake Ray API returns an error."""
 
-    def __init__(
-        self,
-        message: str,
-        *,
-        status_code: int | None = None,
-        error_code: str | None = None,
-        request_id: str | None = None,
-        retryable: bool = False,
-    ) -> None:
-        super().__init__(message)
-        self.status_code = status_code
-        self.error_code = error_code
-        self.request_id = request_id
-        self.retryable = retryable
 
-
-class AiDatalakeRayValidationError(AiDatalakeRayError, ValueError):
+class AiDatalakeRayValidationError(CommonAiDatalakeValidationError, AiDatalakeRayError):
     """Raised when Ray operator parameters are invalid."""

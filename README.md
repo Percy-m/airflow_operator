@@ -2,6 +2,10 @@
 
 Airflow 3.0 custom provider for submitting, polling, and cancelling AiDatalake Spark and Ray jobs.
 
+Spark and Ray share reusable infrastructure under `custom_operator.common`
+while keeping engine-specific operators, API clients, payloads, and states
+under `custom_operator.spark` and `custom_operator.ray`.
+
 Spark and Ray connection mode keeps only static gateway access config in the
 Airflow Connection: put the API base URL in `host` and the static
 `X-Auth-Token` in `password`. `extra.token`, `extra.timeout`, and

@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
-from airflow.triggers.base import BaseTrigger, TriggerEvent
-
+from custom_operator.common.triggers import BaseJobTrigger
 from custom_operator.ray.hooks.ray import RayHook
 from custom_operator.ray.models.ray import (
     FAILURE_STATES,
@@ -16,8 +14,12 @@ from custom_operator.ray.models.ray import (
 )
 
 
-class RayJobTrigger(BaseTrigger):
+class RayJobTrigger(BaseJobTrigger):
     """Poll an AiDatalake Ray job until it reaches a terminal state."""
+
+    service_name = "Ray"
+    terminal_states = TERMINAL_STATES
+    success_state = "SUCCEEDED"
 
     def __init__(
         self,
@@ -32,16 +34,17 @@ class RayJobTrigger(BaseTrigger):
         poll_interval: int = 30,
         max_poll_failures: int = 10,
     ) -> None:
-        super().__init__()
+        super().__init__(
+            workspace_id=workspace_id,
+            job_id=job_id,
+            poll_interval=poll_interval,
+            max_poll_failures=max_poll_failures,
+        )
         self.ray_conn_id = ray_conn_id
         self.ray_base_url = ray_base_url
         self.token = token
         self.request_timeout = request_timeout
         self.verify = verify
-        self.workspace_id = workspace_id
-        self.job_id = job_id
-        self.poll_interval = poll_interval
-        self.max_poll_failures = max_poll_failures
 
     def serialize(self) -> tuple[str, dict[str, Any]]:
         kwargs = {
@@ -57,54 +60,6 @@ class RayJobTrigger(BaseTrigger):
         if self.token:
             kwargs["token"] = self.token
         return ("custom_operator.ray.triggers.ray.RayJobTrigger", kwargs)
-
-    async def run(self):
-        self.log.info(
-            "Ray trigger started job_id=%s poll_interval=%s",
-            self.job_id,
-            self.poll_interval,
-        )
-        failure_count = 0
-        while True:
-            try:
-                event = await asyncio.to_thread(self._poll_once)
-                failure_count = 0
-                state = event.get("state")
-                self.log.info("Ray trigger poll succeeded job_id=%s state=%s", self.job_id, state)
-                if state in TERMINAL_STATES:
-                    event["status"] = "success" if state == "SUCCEEDED" else "failed"
-                    yield TriggerEvent(event)
-                    return
-            except Exception as exc:
-                failure_count += 1
-                self.log.warning(
-                    "Ray trigger poll failed job_id=%s failure_count=%s: %s",
-                    self.job_id,
-                    failure_count,
-                    exc,
-                )
-                if failure_count >= self.max_poll_failures:
-                    await asyncio.to_thread(self._cancel_for_cleanup)
-                    yield TriggerEvent(
-                        {
-                            "status": "failed",
-                            "job_id": self.job_id,
-                            "message": (
-                                "Ray job polling failed "
-                                f"{failure_count} consecutive times: {exc}"
-                            ),
-                        }
-                    )
-                    return
-
-            await asyncio.sleep(self.poll_interval)
-
-    async def cleanup(self) -> None:
-        self.log.info("Ray trigger cleanup started job_id=%s", self.job_id)
-        try:
-            await asyncio.to_thread(self._cancel_for_cleanup)
-        except Exception as exc:
-            self.log.exception("Ray trigger cleanup failed for job_id=%s: %s", self.job_id, exc)
 
     def _poll_once(self) -> dict[str, Any]:
         hook = self._hook()
@@ -126,6 +81,9 @@ class RayJobTrigger(BaseTrigger):
     def _cancel_for_cleanup(self) -> None:
         self.log.info("Ray trigger cleanup cancelling job_id=%s", self.job_id)
         self._hook().cancel_job(self.job_id, check_state=False)
+
+    def _on_poll_failures(self) -> None:
+        self._cancel_for_cleanup()
 
     def _hook(self) -> RayHook:
         return RayHook(

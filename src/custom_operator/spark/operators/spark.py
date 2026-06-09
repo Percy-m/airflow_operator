@@ -7,8 +7,8 @@ from typing import Any, Sequence
 from uuid import uuid4
 
 from airflow.exceptions import AirflowException
-from airflow.sdk import BaseOperator
 
+from custom_operator.common.operators import BaseComputeOperator
 from custom_operator.spark.exceptions import AiDatalakeValidationError
 from custom_operator.spark.hooks.spark import SparkHook
 from custom_operator.spark.models.spark import FAILURE_STATES, SparkJobType, TERMINAL_STATES
@@ -21,7 +21,7 @@ from custom_operator.spark.utils.validation import (
 )
 
 
-class SparkOperator(BaseOperator):
+class SparkOperator(BaseComputeOperator):
     """Submit and monitor an AiDatalake Spark job.
 
     The default job type is ``spark_jar_job`` so example DAGs and minimal usage
@@ -113,7 +113,6 @@ class SparkOperator(BaseOperator):
         self.local_obs_prefix = local_obs_prefix
         self.fetch_detail_on_poll = fetch_detail_on_poll
         self.enable_sql_scripting_job = enable_sql_scripting_job
-        self._job_id: str | None = None
 
     def execute(self, context: dict[str, Any]) -> str | None:
         dag_id = None
@@ -208,13 +207,7 @@ class SparkOperator(BaseOperator):
         raise AirflowException(f"Unexpected Spark trigger event: {event}")
 
     def on_kill(self) -> None:
-        if not self._job_id:
-            return
-        try:
-            self.log.info("Cancelling Spark job from on_kill job_id=%s", self._job_id)
-            self._hook().cancel_job(self._job_id, check_state=True)
-        except Exception as exc:
-            self.log.exception("Failed to cancel Spark job from on_kill job_id=%s: %s", self._job_id, exc)
+        self._cancel_job_on_kill(service_name="Spark", hook_factory=self._hook)
 
     def _sync_wait(self, context: dict[str, Any], hook: SparkHook, job_id: str) -> str:
         failure_count = 0
@@ -327,9 +320,3 @@ class SparkOperator(BaseOperator):
         if self.spark_base_url and self.token:
             return "direct"
         return "connection"
-
-    @staticmethod
-    def _xcom_push(context: dict[str, Any], key: str, value: Any) -> None:
-        task_instance = context.get("ti") or context.get("task_instance")
-        if task_instance is not None:
-            task_instance.xcom_push(key=key, value=value)

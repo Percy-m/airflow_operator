@@ -26,6 +26,12 @@ class BlockPackageFinder(MetaPathFinder):
 
 @contextmanager
 def block_imports(*blocked_prefixes: str):
+    # Airflow provider discovery imports this provider's entry points during
+    # first SDK import. Prime Airflow before installing the package blocker so
+    # boundary tests only assert our module dependencies, not Airflow startup.
+    import airflow.sdk  # noqa: F401
+    import airflow.triggers.base  # noqa: F401
+
     finder = BlockPackageFinder(set(blocked_prefixes))
     saved_modules: dict[str, ModuleType] = {}
     prefixes = (*blocked_prefixes, "custom_operator.spark", "custom_operator.ray")
@@ -70,6 +76,7 @@ def test_spark_and_ray_source_do_not_import_other_runtime_packages():
     forbidden_by_package = {
         "spark": ("custom_operator.token", "custom_operator.ray"),
         "ray": ("custom_operator.token", "custom_operator.spark"),
+        "common": ("custom_operator.token", "custom_operator.spark", "custom_operator.ray"),
     }
     violations: list[str] = []
 
@@ -81,3 +88,17 @@ def test_spark_and_ray_source_do_not_import_other_runtime_packages():
                     violations.append(f"{path.relative_to(PROJECT_ROOT)} imports {forbidden_import}")
 
     assert violations == []
+
+
+def test_common_package_imports_without_runtime_packages():
+    with block_imports("custom_operator.token", "custom_operator.spark", "custom_operator.ray"):
+        for module_name in (
+            "custom_operator.common.connection",
+            "custom_operator.common.exceptions",
+            "custom_operator.common.hooks",
+            "custom_operator.common.http_client",
+            "custom_operator.common.operators",
+            "custom_operator.common.token",
+            "custom_operator.common.triggers",
+        ):
+            importlib.import_module(module_name)

@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
-from airflow.triggers.base import BaseTrigger, TriggerEvent
-
+from custom_operator.common.triggers import BaseJobTrigger
 from custom_operator.spark.hooks.spark import SparkHook
 from custom_operator.spark.models.spark import FAILURE_STATES, TERMINAL_STATES
 
 
-class SparkJobTrigger(BaseTrigger):
+class SparkJobTrigger(BaseJobTrigger):
     """Poll an AiDatalake Spark job until it reaches a terminal state."""
+
+    service_name = "Spark"
+    terminal_states = TERMINAL_STATES
+    success_state = "SUCCEED"
 
     def __init__(
         self,
@@ -28,16 +30,17 @@ class SparkJobTrigger(BaseTrigger):
         max_poll_failures: int = 10,
         fetch_detail_on_poll: bool = True,
     ) -> None:
-        super().__init__()
+        super().__init__(
+            workspace_id=workspace_id,
+            job_id=job_id,
+            poll_interval=poll_interval,
+            max_poll_failures=max_poll_failures,
+        )
         self.spark_conn_id = spark_conn_id
         self.spark_base_url = spark_base_url
         self.token = token
         self.request_timeout = request_timeout
         self.verify = verify
-        self.workspace_id = workspace_id
-        self.job_id = job_id
-        self.poll_interval = poll_interval
-        self.max_poll_failures = max_poll_failures
         self.fetch_detail_on_poll = fetch_detail_on_poll
 
     def serialize(self) -> tuple[str, dict[str, Any]]:
@@ -55,54 +58,6 @@ class SparkJobTrigger(BaseTrigger):
         if self.token:
             kwargs["token"] = self.token
         return ("custom_operator.spark.triggers.spark.SparkJobTrigger", kwargs)
-
-    async def run(self):
-        self.log.info(
-            "Spark trigger started job_id=%s poll_interval=%s",
-            self.job_id,
-            self.poll_interval,
-        )
-        failure_count = 0
-        while True:
-            try:
-                event = await asyncio.to_thread(self._poll_once)
-                failure_count = 0
-                state = event.get("state")
-                self.log.info("Spark trigger poll succeeded job_id=%s state=%s", self.job_id, state)
-                if state in TERMINAL_STATES:
-                    status = "success" if state == "SUCCEED" else "failed"
-                    event["status"] = status
-                    yield TriggerEvent(event)
-                    return
-            except Exception as exc:
-                failure_count += 1
-                self.log.warning(
-                    "Spark trigger poll failed job_id=%s failure_count=%s: %s",
-                    self.job_id,
-                    failure_count,
-                    exc,
-                )
-                if failure_count >= self.max_poll_failures:
-                    yield TriggerEvent(
-                        {
-                            "status": "failed",
-                            "job_id": self.job_id,
-                            "message": (
-                                "Spark job polling failed "
-                                f"{failure_count} consecutive times: {exc}"
-                            ),
-                        }
-                    )
-                    return
-
-            await asyncio.sleep(self.poll_interval)
-
-    async def cleanup(self) -> None:
-        self.log.info("Spark trigger cleanup started job_id=%s", self.job_id)
-        try:
-            await asyncio.to_thread(self._cancel_for_cleanup)
-        except Exception as exc:
-            self.log.exception("Spark trigger cleanup failed for job_id=%s: %s", self.job_id, exc)
 
     def _poll_once(self) -> dict[str, Any]:
         hook = self._hook()

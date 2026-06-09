@@ -7,8 +7,8 @@ from typing import Any, Sequence
 from uuid import uuid4
 
 from airflow.exceptions import AirflowException
-from airflow.sdk import BaseOperator
 
+from custom_operator.common.operators import BaseComputeOperator
 from custom_operator.ray.exceptions import AiDatalakeRayValidationError
 from custom_operator.ray.hooks.ray import RayHook
 from custom_operator.ray.models.ray import FAILURE_STATES, TERMINAL_STATES
@@ -22,7 +22,7 @@ from custom_operator.ray.utils.validation import (
 )
 
 
-class RayOperator(BaseOperator):
+class RayOperator(BaseComputeOperator):
     """Submit and monitor an AiDatalake Ray job."""
 
     template_fields: Sequence[str] = (
@@ -83,7 +83,6 @@ class RayOperator(BaseOperator):
         self.max_poll_failures = max_poll_failures
         self.convert_obs_path = convert_obs_path
         self.local_obs_prefix = local_obs_prefix
-        self._job_id: str | None = None
 
     def execute(self, context: dict[str, Any]) -> str | None:
         self._validate()
@@ -150,13 +149,7 @@ class RayOperator(BaseOperator):
         raise AirflowException(f"Unexpected Ray trigger event: {event}")
 
     def on_kill(self) -> None:
-        if not self._job_id:
-            return
-        try:
-            self.log.info("Cancelling Ray job from on_kill job_id=%s", self._job_id)
-            self._hook().cancel_job(self._job_id, check_state=True)
-        except Exception as exc:
-            self.log.exception("Failed to cancel Ray job from on_kill job_id=%s: %s", self._job_id, exc)
+        self._cancel_job_on_kill(service_name="Ray", hook_factory=self._hook)
 
     def _sync_wait(self, context: dict[str, Any], hook: RayHook, job_id: str) -> str:
         failure_count = 0
@@ -259,9 +252,3 @@ class RayOperator(BaseOperator):
             run_id = getattr(dag_run, "run_id", None)
         parts = [part for part in (dag_id, self.task_id, run_id) if part]
         return "-".join(parts)[:64] or self.task_id
-
-    @staticmethod
-    def _xcom_push(context: dict[str, Any], key: str, value: Any) -> None:
-        task_instance = context.get("ti") or context.get("task_instance")
-        if task_instance is not None:
-            task_instance.xcom_push(key=key, value=value)
