@@ -71,6 +71,50 @@ def test_spark_hook_reads_token_from_connection_password(monkeypatch):
     assert client.token_provider.get_token() == "password-token"
 
 
+def test_spark_hook_uses_explicit_base_url_and_connection_password(monkeypatch):
+    conn = SimpleNamespace(
+        host="https://connection-spark-api.example.com",
+        schema=None,
+        port=None,
+        password="password-token",
+        extra_dejson={},
+    )
+    monkeypatch.setattr(SparkHook, "get_connection", lambda self, conn_id: conn)
+
+    hook = SparkHook(
+        workspace_id="workspace-1",
+        spark_conn_id="spark_conn",
+        spark_base_url="https://explicit-spark-api.example.com",
+    )
+
+    client = hook.client
+
+    assert client.http_client.base_url == "https://explicit-spark-api.example.com"
+    assert client.token_provider.get_token() == "password-token"
+
+
+def test_spark_hook_uses_explicit_token_and_connection_host(monkeypatch):
+    conn = SimpleNamespace(
+        host="spark-api.example.com",
+        schema="https",
+        port=None,
+        password="password-token",
+        extra_dejson={},
+    )
+    monkeypatch.setattr(SparkHook, "get_connection", lambda self, conn_id: conn)
+
+    hook = SparkHook(
+        workspace_id="workspace-1",
+        spark_conn_id="spark_conn",
+        token="explicit-token",
+    )
+
+    client = hook.client
+
+    assert client.http_client.base_url == "https://spark-api.example.com"
+    assert client.token_provider.get_token() == "explicit-token"
+
+
 def test_spark_hook_requires_token(monkeypatch):
     conn = SimpleNamespace(
         host="spark-api.example.com",

@@ -499,14 +499,16 @@ workspace_id: str
 - `token`：静态 `X-Auth-Token`，可来自上游 TokenOperator 的 XCom 模板。
 - `request_timeout`：Spark API 请求超时时间。
 - `verify`：HTTPS 证书校验开关。
-- `spark_conn_id`：未传完整直接配置时，从 Airflow Connection 读取 Spark API 地址和静态 token。
+- `spark_conn_id`：`spark_base_url` 或 `token` 缺失时，从 Airflow Connection 补齐缺失的 Spark API 地址或静态 token。
 - `workspace_id`：Spark API 路径参数。
 
 配置优先级：
 
 1. 同时传入 `spark_base_url` 和 `token` 时，使用直接配置模式，不读取 Airflow Connection。
-2. 未传完整直接配置时，回退到 Spark Connection 模式。
-3. Connection 模式下默认使用 `aidatalake_spark`。
+2. 只传 `spark_base_url` 时，从 Spark Connection `password` 补齐 token。
+3. 只传 `token` 时，从 Spark Connection `host` 补齐 Spark API base URL。
+4. 两者都未传时，从 Spark Connection `host` 和 `password` 读取。
+5. Connection 模式下默认使用 `aidatalake_spark`。
 
 Connection 模式只读取 Airflow Connection 基础字段：`host` 填 Spark API base URL，`password` 填静态 `X-Auth-Token`。`extra.token`、`extra.timeout`、`extra.verify` 不再读取；`request_timeout` 和 `verify` 始终来自 Operator/Hook 参数默认值或显式参数。
 
@@ -885,7 +887,7 @@ from airflow.sdk import BaseOperator
 
 ### 12.2 配置读取
 
-优先使用 Operator 直接配置；未传完整直接配置时，使用 Airflow 3.0 公共接口读取 Connection。
+优先使用 Operator 直接配置；`spark_base_url` 或 `token` 任一缺失时，使用 Airflow 3.0 公共接口从 Connection 补齐缺失字段。
 
 设计目标：
 

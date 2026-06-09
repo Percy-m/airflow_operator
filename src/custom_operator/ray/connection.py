@@ -40,13 +40,14 @@ def resolve_connection_config(
         )
 
     conn = hook.get_connection(conn_id)
-    resolved_base_url = connection_base_url(conn)
-    if not conn.password:
+    resolved_base_url = base_url or connection_base_url(conn)
+    resolved_token = token or conn.password
+    if not resolved_token:
         raise AiDatalakeRayAuthError("Ray token must be configured in Connection password")
 
     return ConnectionConfig(
         base_url=resolved_base_url,
-        token=str(conn.password),
+        token=str(resolved_token),
         timeout=request_timeout,
         verify=verify,
     )

@@ -46,6 +46,50 @@ def test_ray_hook_reads_token_from_connection_password(monkeypatch):
     assert client.token_provider.get_token() == "connection-token"
 
 
+def test_ray_hook_uses_explicit_base_url_and_connection_password(monkeypatch):
+    conn = SimpleNamespace(
+        host="https://connection-ray-api.example.com",
+        schema=None,
+        port=None,
+        password="connection-token",
+        extra_dejson={},
+    )
+    monkeypatch.setattr(RayHook, "get_connection", lambda self, conn_id: conn)
+
+    hook = RayHook(
+        workspace_id="workspace-1",
+        ray_conn_id="ray_conn",
+        ray_base_url="https://explicit-ray-api.example.com",
+    )
+
+    client = hook.client
+
+    assert client.http_client.base_url == "https://explicit-ray-api.example.com"
+    assert client.token_provider.get_token() == "connection-token"
+
+
+def test_ray_hook_uses_explicit_token_and_connection_host(monkeypatch):
+    conn = SimpleNamespace(
+        host="ray-api.example.com",
+        schema="https",
+        port=None,
+        password="connection-token",
+        extra_dejson={},
+    )
+    monkeypatch.setattr(RayHook, "get_connection", lambda self, conn_id: conn)
+
+    hook = RayHook(
+        workspace_id="workspace-1",
+        ray_conn_id="ray_conn",
+        token="explicit-token",
+    )
+
+    client = hook.client
+
+    assert client.http_client.base_url == "https://ray-api.example.com"
+    assert client.token_provider.get_token() == "explicit-token"
+
+
 def test_ray_hook_ignores_connection_extra(monkeypatch):
     conn = SimpleNamespace(
         host="https://ray-api.example.com",
