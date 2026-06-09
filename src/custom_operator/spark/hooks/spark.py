@@ -4,22 +4,23 @@ from __future__ import annotations
 
 from typing import Any
 
-from airflow.sdk import BaseHook
-
+from custom_operator.common.hooks import BaseComputeHook
 from custom_operator.spark.clients.spark_api import SparkApiClient
-from custom_operator.spark.connection import resolve_connection_config
-from custom_operator.spark.http_client import HttpClient
+from custom_operator.spark.exceptions import AiDatalakeApiError, AiDatalakeAuthError
 from custom_operator.spark.models.spark import CANCELABLE_STATES, TERMINAL_STATES
-from custom_operator.spark.token import StaticTokenProvider
 
 
-class SparkHook(BaseHook):
+class SparkHook(BaseComputeHook):
     """High-level Spark job operations used by operators and triggers."""
 
     conn_name_attr = "spark_conn_id"
     default_conn_name = "aidatalake_spark"
     conn_type = "http"
     hook_name = "AiDatalake Spark"
+    api_client_cls = SparkApiClient
+    api_error_cls = AiDatalakeApiError
+    auth_error_cls = AiDatalakeAuthError
+    service_name = "Spark"
 
     def __init__(
         self,
@@ -31,14 +32,17 @@ class SparkHook(BaseHook):
         request_timeout: int = 30,
         verify: bool = True,
     ) -> None:
-        super().__init__()
-        self.spark_conn_id = spark_conn_id or self.default_conn_name
-        self.workspace_id = workspace_id
+        resolved_conn_id = spark_conn_id or self.default_conn_name
+        super().__init__(
+            conn_id=resolved_conn_id,
+            workspace_id=workspace_id,
+            base_url=spark_base_url,
+            token=token,
+            request_timeout=request_timeout,
+            verify=verify,
+        )
+        self.spark_conn_id = resolved_conn_id
         self.spark_base_url = spark_base_url
-        self.token = token
-        self.request_timeout = request_timeout
-        self.verify = verify
-        self._client: SparkApiClient | None = None
 
     def submit_job(self, payload: dict[str, Any], *, client_token: str | None = None) -> str:
         return self.client.create_job(
@@ -68,27 +72,3 @@ class SparkHook(BaseHook):
 
         self.client.cancel_job(workspace_id=self.workspace_id, job_id=job_id)
         return True
-
-    @property
-    def client(self) -> SparkApiClient:
-        if self._client is None:
-            self._client = self._build_client()
-        return self._client
-
-    def _build_client(self) -> SparkApiClient:
-        config = resolve_connection_config(
-            self,
-            conn_id=self.spark_conn_id,
-            base_url=self.spark_base_url,
-            token=self.token,
-            request_timeout=self.request_timeout,
-            verify=self.verify,
-        )
-        return SparkApiClient(
-            http_client=HttpClient(
-                base_url=config.base_url,
-                timeout=config.timeout,
-                verify=config.verify,
-            ),
-            token_provider=StaticTokenProvider(config.token),
-        )
