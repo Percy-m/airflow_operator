@@ -2,6 +2,12 @@
 
 Airflow 3.0 custom provider for submitting, polling, and cancelling AiDatalake Spark and Ray jobs.
 
+Spark and Ray connection mode keeps only static gateway access config in the
+Airflow Connection: put the API base URL in `host` and the static
+`X-Auth-Token` in `password`. `extra.token`, `extra.timeout`, and
+`extra.verify` are not read; request timeout and TLS verification come from the
+operator or hook arguments.
+
 Dynamic token acquisition lives in `custom_operator.token`. Business DAGs should
 fetch the token in a separate task and pass that XCom value into Spark or Ray.
 

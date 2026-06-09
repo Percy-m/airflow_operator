@@ -28,7 +28,7 @@ def test_spark_hook_direct_config_does_not_read_connection(monkeypatch):
     assert client.token_provider.get_token() == "test-token"
 
 
-def test_spark_hook_reads_token_from_connection_extra(monkeypatch):
+def test_spark_hook_reads_connection_host_password_and_ignores_extra(monkeypatch):
     conn = SimpleNamespace(
         host="https://spark-api.example.com",
         schema=None,
@@ -38,14 +38,19 @@ def test_spark_hook_reads_token_from_connection_extra(monkeypatch):
     )
     monkeypatch.setattr(SparkHook, "get_connection", lambda self, conn_id: conn)
 
-    hook = SparkHook(workspace_id="workspace-1", spark_conn_id="spark_conn")
+    hook = SparkHook(
+        workspace_id="workspace-1",
+        spark_conn_id="spark_conn",
+        request_timeout=12,
+        verify=True,
+    )
 
     client = hook.client
 
     assert client.http_client.base_url == "https://spark-api.example.com"
-    assert client.http_client.timeout == 15
-    assert client.http_client.verify is False
-    assert client.token_provider.get_token() == "extra-token"
+    assert client.http_client.timeout == 12
+    assert client.http_client.verify is True
+    assert client.token_provider.get_token() == "password-token"
 
 
 def test_spark_hook_reads_token_from_connection_password(monkeypatch):
@@ -72,7 +77,7 @@ def test_spark_hook_requires_token(monkeypatch):
         schema="https",
         port=None,
         password=None,
-        extra_dejson={},
+        extra_dejson={"token": "extra-token"},
     )
     monkeypatch.setattr(SparkHook, "get_connection", lambda self, conn_id: conn)
 

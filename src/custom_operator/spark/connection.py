@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 
 from custom_operator.spark.exceptions import AiDatalakeAuthError
 
@@ -40,20 +40,15 @@ def resolve_connection_config(
         )
 
     conn = hook.get_connection(conn_id)
-    extra = conn.extra_dejson or {}
-    resolved_base_url = base_url or connection_base_url(conn)
-    resolved_token = token or extra.get("token") or conn.password
-    if not resolved_token:
-        raise AiDatalakeAuthError(
-            "Spark token must be configured in DAG token, "
-            "Connection extra.token, or Connection password"
-        )
+    resolved_base_url = connection_base_url(conn)
+    if not conn.password:
+        raise AiDatalakeAuthError("Spark token must be configured in Connection password")
 
     return ConnectionConfig(
         base_url=resolved_base_url,
-        token=str(resolved_token),
-        timeout=int(extra.get("timeout", request_timeout)),
-        verify=as_bool(extra.get("verify", verify)),
+        token=str(conn.password),
+        timeout=request_timeout,
+        verify=verify,
     )
 
 
@@ -67,11 +62,3 @@ def connection_base_url(conn) -> str:
     if conn.port:
         base_url = f"{base_url}:{conn.port}"
     return base_url.rstrip("/")
-
-
-def as_bool(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() not in {"0", "false", "no", "off"}
-    return bool(value)

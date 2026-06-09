@@ -15,7 +15,7 @@
 - 不再调用 FE/SF 文档中提到的算力网关接口。
 - Spark 作业创建、查询、取消直接调用 `AiDatalake-API-Spark-Specification` 中的 Spark 作业相关 API。
 - 不再使用文档旧方案中的固定网关 Token。
-- SparkOperator 不负责动态获取 token，只接收显式 `token`，或从 Spark Airflow Connection 的 `extra.token`/`password` 读取静态 token。
+- SparkOperator 不负责动态获取 token，只接收显式 `token`，或从 Spark Airflow Connection 的 `password` 读取静态 token。
 - 动态 token 获取由独立 `TokenOperator` 完成，调用 `auth_url + auth_body`，并从响应 Header `x-subject-token` 获取 token。
 - 后续 Spark API 请求统一添加 Header：`X-Auth-Token: {token}`。
 
@@ -499,7 +499,7 @@ workspace_id: str
 - `token`：静态 `X-Auth-Token`，可来自上游 TokenOperator 的 XCom 模板。
 - `request_timeout`：Spark API 请求超时时间。
 - `verify`：HTTPS 证书校验开关。
-- `spark_conn_id`：未传直接配置时，从 Airflow Connection 读取 Spark API 地址。
+- `spark_conn_id`：未传完整直接配置时，从 Airflow Connection 读取 Spark API 地址和静态 token。
 - `workspace_id`：Spark API 路径参数。
 
 配置优先级：
@@ -508,15 +508,7 @@ workspace_id: str
 2. 未传完整直接配置时，回退到 Spark Connection 模式。
 3. Connection 模式下默认使用 `aidatalake_spark`。
 
-Connection Extra 示例：
-
-```json
-{
-  "token": "TODO",
-  "timeout": 30,
-  "verify": true
-}
-```
+Connection 模式只读取 Airflow Connection 基础字段：`host` 填 Spark API base URL，`password` 填静态 `X-Auth-Token`。`extra.token`、`extra.timeout`、`extra.verify` 不再读取；`request_timeout` 和 `verify` 始终来自 Operator/Hook 参数默认值或显式参数。
 
 ### 5.2 作业基础参数
 
@@ -928,7 +920,7 @@ Trigger 不序列化：
 - Client 实例
 - Connection 对象
 
-说明：显式 token 模式下，token 会作为静态字符串进入 Trigger 序列化参数；生产环境如不希望 token 进入 XCom/Trigger 参数，建议使用 Spark Connection 的 `extra.token` 或 `password`。
+说明：显式 token 模式下，token 会作为静态字符串进入 Trigger 序列化参数；生产环境如不希望 token 进入 XCom/Trigger 参数，建议使用 Spark Connection 的 `password`。
 
 ## 13. 示例 DAG
 
