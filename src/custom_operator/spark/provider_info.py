@@ -13,6 +13,10 @@ def get_provider_info() -> dict:
             {
                 "integration-name": "AiDatalake Spark",
                 "python-modules": ["custom_operator.spark.hooks.spark"],
+            },
+            {
+                "integration-name": "AiDatalake Workspace Core",
+                "python-modules": ["custom_operator.spark.hooks.log_download"],
             }
         ],
     }

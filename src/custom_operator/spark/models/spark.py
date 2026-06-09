@@ -49,4 +49,11 @@ class SparkTriggerEvent(TypedDict, total=False):
     state: str
     message: str
     log_url: str | None
+    spark_log_download_status: str
+    spark_log_download_url: str
+    spark_log_download_expires_at: str
+    spark_log_file_size: int
+    spark_log_file_exists: bool
+    spark_log_download_message: str
+    spark_log_download_error_code: str
     detail: dict[str, Any] | None

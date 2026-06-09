@@ -9,7 +9,9 @@ from uuid import uuid4
 from airflow.exceptions import AirflowException
 from airflow.sdk import BaseOperator
 
+from custom_operator.spark.clients.log_download import LOG_DOWNLOAD_EVENT_KEYS
 from custom_operator.spark.exceptions import AiDatalakeValidationError
+from custom_operator.spark.hooks.log_download import SparkLogDownloadHook
 from custom_operator.spark.hooks.spark import SparkHook
 from custom_operator.spark.models.spark import FAILURE_STATES, SparkJobType, TERMINAL_STATES
 from custom_operator.spark.triggers.spark import SparkJobTrigger
@@ -41,6 +43,8 @@ class SparkOperator(BaseOperator):
         "spark_sql_scripting_parameter",
         "spark_base_url",
         "token",
+        "workspace_core_base_url",
+        "workspace_core_internal_token",
         "resource_config",
         "spark_config",
         "image_config",
@@ -57,6 +61,11 @@ class SparkOperator(BaseOperator):
         token: str | None = None,
         request_timeout: int = 30,
         verify: bool = True,
+        workspace_core_conn_id: str | None = None,
+        workspace_core_base_url: str | None = None,
+        workspace_core_internal_token: str | None = None,
+        log_download_timeout: int = 5,
+        enable_log_download: bool = True,
         workspace_id: str,
         name: str,
         endpoint_name: str,
@@ -89,6 +98,11 @@ class SparkOperator(BaseOperator):
         self.token = token
         self.request_timeout = request_timeout
         self.verify = verify
+        self.workspace_core_conn_id = workspace_core_conn_id
+        self.workspace_core_base_url = workspace_core_base_url
+        self.workspace_core_internal_token = workspace_core_internal_token
+        self.log_download_timeout = log_download_timeout
+        self.enable_log_download = enable_log_download
         self.workspace_id = workspace_id
         self.name = name
         self.endpoint_name = endpoint_name
@@ -170,6 +184,11 @@ class SparkOperator(BaseOperator):
                     token=self.token,
                     request_timeout=self.request_timeout,
                     verify=self.verify,
+                    workspace_core_conn_id=self.workspace_core_conn_id,
+                    workspace_core_base_url=self.workspace_core_base_url,
+                    workspace_core_internal_token=self.workspace_core_internal_token,
+                    log_download_timeout=self.log_download_timeout,
+                    enable_log_download=self.enable_log_download,
                     workspace_id=self.workspace_id,
                     job_id=job_id,
                     poll_interval=self.poll_interval,
@@ -199,6 +218,7 @@ class SparkOperator(BaseOperator):
             self._xcom_push(context, "log_url", log_url)
         if message:
             self._xcom_push(context, "spark_job_message", message)
+        self._push_log_download_result(context, event)
 
         if state == "SUCCEED":
             self.log.info("Spark job succeeded job_id=%s", job_id)
@@ -218,6 +238,7 @@ class SparkOperator(BaseOperator):
 
     def _sync_wait(self, context: dict[str, Any], hook: SparkHook, job_id: str) -> str:
         failure_count = 0
+        log_download_result: dict[str, Any] | None = None
         while True:
             try:
                 state_response = hook.get_job_state(job_id)
@@ -226,8 +247,15 @@ class SparkOperator(BaseOperator):
                 if self.fetch_detail_on_poll:
                     try:
                         detail = hook.get_job_detail(job_id)
-                        if detail.get("log_url"):
-                            self._xcom_push(context, "log_url", detail["log_url"])
+                        log_url = detail.get("log_url")
+                        if log_url:
+                            self._xcom_push(context, "log_url", log_url)
+                            if log_download_result is None:
+                                log_download_result = self._create_log_download_result(
+                                    job_id=job_id,
+                                    log_url=log_url,
+                                )
+                                self._push_log_download_result(context, log_download_result)
                     except Exception as exc:
                         self.log.warning("Failed to fetch Spark job detail job_id=%s: %s", job_id, exc)
                 failure_count = 0
@@ -323,10 +351,67 @@ class SparkOperator(BaseOperator):
             workspace_id=self.workspace_id,
         )
 
+    def _log_download_hook(self) -> SparkLogDownloadHook:
+        return SparkLogDownloadHook(
+            workspace_core_conn_id=self.workspace_core_conn_id,
+            workspace_core_base_url=self.workspace_core_base_url,
+            workspace_core_internal_token=self.workspace_core_internal_token,
+            request_timeout=self.log_download_timeout,
+            verify=self.verify,
+        )
+
+    def _create_log_download_result(self, *, job_id: str, log_url: str) -> dict[str, Any]:
+        if not self.enable_log_download:
+            return {
+                "spark_log_download_status": "disabled",
+                "spark_log_download_message": "Spark log download is disabled",
+            }
+        if not self._has_log_download_config():
+            self.log.warning(
+                "Skip Spark log download URL creation because WorkspaceCoreService is not configured"
+            )
+            return {
+                "spark_log_download_status": "disabled",
+                "spark_log_download_message": "WorkspaceCoreService log download is not configured",
+            }
+
+        try:
+            result = self._log_download_hook().create_download_url(job_id=job_id, log_path=log_url)
+            status = result.get("spark_log_download_status")
+            if status == "available":
+                self.log.info("Spark log download URL created job_id=%s", job_id)
+            else:
+                self.log.warning(
+                    "Spark log download URL not available job_id=%s status=%s message=%s",
+                    job_id,
+                    status,
+                    result.get("spark_log_download_message"),
+                )
+            return result
+        except Exception as exc:
+            self.log.warning("Failed to create Spark log download URL job_id=%s: %s", job_id, exc)
+            return {
+                "spark_log_download_status": "error",
+                "spark_log_download_message": str(exc),
+            }
+
+    def _has_log_download_config(self) -> bool:
+        return bool(
+            self.workspace_core_conn_id
+            or self.workspace_core_base_url
+            or self.workspace_core_internal_token
+        )
+
     def _config_mode(self) -> str:
         if self.spark_base_url and self.token:
             return "direct"
         return "connection"
+
+    @classmethod
+    def _push_log_download_result(cls, context: dict[str, Any], result: dict[str, Any]) -> None:
+        for key in LOG_DOWNLOAD_EVENT_KEYS:
+            if key in result and result[key] is not None:
+                cls._xcom_push(context, key, result[key])
 
     @staticmethod
     def _xcom_push(context: dict[str, Any], key: str, value: Any) -> None:

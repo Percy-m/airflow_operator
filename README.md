@@ -40,6 +40,29 @@ test_token >> test_spark
 
 `TokenOperator` calls `auth_url` with `auth_body` and reads `x-subject-token` from the response header.
 
+Spark log download URL generation can be enabled by pointing the operator at
+WorkspaceCoreService. During polling, the first Spark detail response containing
+`log_url` is sent to `POST /internal/log/v1/create`; the resulting download URL
+is written to XCom as `spark_log_download_url`.
+
+```python
+test_spark = SparkOperator(
+    task_id="test_spark",
+    spark_base_url="https://spark-api.example.com",
+    token="{{ ti.xcom_pull(task_ids='test_token') }}",
+    workspace_core_base_url="https://workspace-core.example.com",
+    workspace_core_internal_token="{{ var.value.workspace_core_internal_token }}",
+    workspace_id="12345678-1234-1234-1234-123456789012",
+    name="spark-jar-demo",
+    endpoint_name="endpoint1",
+    spark_version="3.3.2",
+    spark_jar_parameter={"main_jar": "/mnt/OBS/demo/jars/main.jar"},
+)
+```
+
+For production, prefer `workspace_core_conn_id`; put the WorkspaceCoreService
+base URL in Connection `host` and the internal token in `password`.
+
 See `docs/spark_operator_design.md` for the full design.
 
 ## Ray Operator
