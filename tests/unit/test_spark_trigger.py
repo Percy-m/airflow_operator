@@ -55,7 +55,7 @@ def test_spark_trigger_serializes_log_download_config():
     assert kwargs["enable_log_download"] is True
 
 
-def test_spark_trigger_creates_log_download_url_once(monkeypatch):
+def test_spark_trigger_refreshes_log_download_url_each_poll(monkeypatch):
     class SparkHookStub:
         def get_job_state(self, job_id):
             return {"job_id": job_id, "state": "RUNNING"}
@@ -65,13 +65,16 @@ def test_spark_trigger_creates_log_download_url_once(monkeypatch):
 
     class LogDownloadHookStub:
         def __init__(self):
-            self.calls = 0
+            self.calls = []
 
         def create_download_url(self, *, job_id, log_path):
-            self.calls += 1
+            self.calls.append((job_id, log_path))
+            call_number = len(self.calls)
             return {
                 "spark_log_download_status": "available",
-                "spark_log_download_url": f"https://obs.example.com/{job_id}.tar.gz",
+                "spark_log_download_url": (
+                    f"https://obs.example.com/{job_id}-{call_number}.tar.gz"
+                ),
             }
 
     log_hook = LogDownloadHookStub()
@@ -88,7 +91,10 @@ def test_spark_trigger_creates_log_download_url_once(monkeypatch):
     first_event = trigger._poll_once()
     second_event = trigger._poll_once()
 
-    assert log_hook.calls == 1
+    assert log_hook.calls == [
+        ("job-1", "obs://bucket/logs/job-1.tar.gz"),
+        ("job-1", "obs://bucket/logs/job-1.tar.gz"),
+    ]
     assert first_event["spark_log_download_status"] == "available"
-    assert first_event["spark_log_download_url"] == "https://obs.example.com/job-1.tar.gz"
-    assert second_event["spark_log_download_url"] == "https://obs.example.com/job-1.tar.gz"
+    assert first_event["spark_log_download_url"] == "https://obs.example.com/job-1-1.tar.gz"
+    assert second_event["spark_log_download_url"] == "https://obs.example.com/job-1-2.tar.gz"

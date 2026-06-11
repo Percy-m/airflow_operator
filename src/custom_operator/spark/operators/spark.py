@@ -238,7 +238,6 @@ class SparkOperator(BaseOperator):
 
     def _sync_wait(self, context: dict[str, Any], hook: SparkHook, job_id: str) -> str:
         failure_count = 0
-        log_download_result: dict[str, Any] | None = None
         while True:
             try:
                 state_response = hook.get_job_state(job_id)
@@ -250,12 +249,11 @@ class SparkOperator(BaseOperator):
                         log_url = detail.get("log_url")
                         if log_url:
                             self._xcom_push(context, "log_url", log_url)
-                            if log_download_result is None:
-                                log_download_result = self._create_log_download_result(
-                                    job_id=job_id,
-                                    log_url=log_url,
-                                )
-                                self._push_log_download_result(context, log_download_result)
+                            log_download_result = self._create_log_download_result(
+                                job_id=job_id,
+                                log_url=log_url,
+                            )
+                            self._push_log_download_result(context, log_download_result)
                     except Exception as exc:
                         self.log.warning("Failed to fetch Spark job detail job_id=%s: %s", job_id, exc)
                 failure_count = 0

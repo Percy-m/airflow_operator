@@ -41,9 +41,9 @@ test_token >> test_spark
 `TokenOperator` calls `auth_url` with `auth_body` and reads `x-subject-token` from the response header.
 
 Spark log download URL generation can be enabled by pointing the operator at
-WorkspaceCoreService. During polling, the first Spark detail response containing
-`log_url` is sent to `POST /internal/log/v1/create`; the resulting download URL
-is written to XCom as `spark_log_download_url`.
+WorkspaceCoreService. During polling, every Spark detail response containing
+`log_url` is sent to `POST /internal/log/v1/create`; the latest download URL is
+written to XCom as `spark_log_download_url`.
 
 ```python
 test_spark = SparkOperator(

@@ -4,9 +4,11 @@ from custom_operator.spark.operators.spark import SparkOperator
 class FakeTaskInstance:
     def __init__(self):
         self.values = {}
+        self.records = []
 
     def xcom_push(self, *, key, value):
         self.values[key] = value
+        self.records.append((key, value))
 
 
 def test_spark_operator_defaults_to_jar_job_and_builds_payload():
@@ -95,3 +97,60 @@ def test_spark_operator_execute_complete_pushes_log_download_xcom():
     assert ti.values["spark_log_download_status"] == "available"
     assert ti.values["spark_log_download_url"] == "https://obs.example.com/job-1.tar.gz"
     assert ti.values["spark_log_file_size"] == 1024
+
+
+def test_spark_operator_sync_wait_refreshes_log_download_xcom_each_poll(monkeypatch):
+    class SparkHookStub:
+        def __init__(self):
+            self.states = ["RUNNING", "SUCCEED"]
+            self.detail_calls = 0
+
+        def get_job_state(self, job_id):
+            return {"job_id": job_id, "state": self.states.pop(0)}
+
+        def get_job_detail(self, job_id):
+            self.detail_calls += 1
+            return {
+                "job_id": job_id,
+                "log_url": f"obs://bucket/logs/{job_id}-{self.detail_calls}.tar.gz",
+            }
+
+    operator = SparkOperator(
+        task_id="spark_jar",
+        workspace_id="workspace-1",
+        name="demo",
+        endpoint_name="endpoint1",
+        spark_version="3.3.2",
+        spark_jar_parameter={
+            "main_class": "com.example.Main",
+            "main_jar": "obs://bucket/main.jar",
+        },
+        poll_interval=0,
+    )
+    calls = []
+
+    def create_log_download_result(*, job_id, log_url):
+        calls.append((job_id, log_url))
+        return {
+            "spark_log_download_status": "available",
+            "spark_log_download_url": f"https://obs.example.com/{job_id}-{len(calls)}.tar.gz",
+        }
+
+    monkeypatch.setattr(operator, "_create_log_download_result", create_log_download_result)
+    ti = FakeTaskInstance()
+
+    result = operator._sync_wait({"ti": ti}, SparkHookStub(), "job-1")
+
+    assert result == "job-1"
+    assert calls == [
+        ("job-1", "obs://bucket/logs/job-1-1.tar.gz"),
+        ("job-1", "obs://bucket/logs/job-1-2.tar.gz"),
+    ]
+    assert [
+        value for key, value in ti.records if key == "spark_log_download_url"
+    ] == [
+        "https://obs.example.com/job-1-1.tar.gz",
+        "https://obs.example.com/job-1-2.tar.gz",
+    ]
+    assert ti.values["log_url"] == "obs://bucket/logs/job-1-2.tar.gz"
+    assert ti.values["spark_log_download_url"] == "https://obs.example.com/job-1-2.tar.gz"

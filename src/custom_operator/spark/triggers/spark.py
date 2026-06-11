@@ -50,7 +50,6 @@ class SparkJobTrigger(BaseTrigger):
         self.poll_interval = poll_interval
         self.max_poll_failures = max_poll_failures
         self.fetch_detail_on_poll = fetch_detail_on_poll
-        self._log_download_attempted = False
         self._log_download_result: dict[str, Any] | None = None
 
     def serialize(self) -> tuple[str, dict[str, Any]]:
@@ -138,9 +137,8 @@ class SparkJobTrigger(BaseTrigger):
                 detail = hook.get_job_detail(self.job_id)
                 log_url = detail.get("log_url")
                 event["log_url"] = log_url
-                if log_url and not self._log_download_attempted:
+                if log_url:
                     self._log_download_result = self._create_log_download_result(log_url)
-                    self._log_download_attempted = True
                 if state in TERMINAL_STATES:
                     event["detail"] = _compact_detail(detail)
             except Exception as exc:
